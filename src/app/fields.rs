@@ -221,6 +221,8 @@ form_fields! {
         OpeningValue => FieldKind::Amount, "Starting Value", "(Optional - what it is worth now)";
         OpeningInvested => FieldKind::Amount, "Contributed So Far",
             "(Optional - defaults to the starting value)";
+        OpeningQuantity => FieldKind::Amount, "Quantity Held",
+            "(Optional - units such as BTC; the Cripto account is then valued at market price)";
         OpeningDate => FieldKind::Date, "As Of (YYYY-MM-DD)",
             "(◀/▶ or +/- for days, Shift+◀/▶ for months)";
     }

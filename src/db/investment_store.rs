@@ -20,6 +20,26 @@ pub struct SyncedFlow {
     pub entry_kind: InvestmentEntryKind,
     pub amount: Decimal,
     pub note: String,
+    /// Units the trade moved (e.g. BTC), for accounts valued as units × price.
+    pub quantity: Option<Decimal>,
+}
+
+/// An investment account's value on a day, as the sync computed it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncedValuation {
+    pub account_name: String,
+    pub account_kind: String,
+    pub date: NaiveDate,
+    pub amount: Decimal,
+    pub note: String,
+}
+
+/// Units held in an account: the quantity on its latest opening valuation plus every synced
+/// trade after that day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Holding {
+    pub as_of: NaiveDate,
+    pub quantity: Decimal,
 }
 
 pub trait InvestmentStore {
@@ -34,6 +54,15 @@ pub trait InvestmentStore {
     fn delete_entry(&self, id: i64) -> Result<()>;
     /// Record bank flows not already recorded in this ledger. Returns how many were added.
     fn sync_flows(&self, flows: &[SyncedFlow]) -> Result<usize>;
+    /// Record bank-reported values, replacing any valuation already on that day.
+    /// Record computed values. One per account per day, replacing an earlier synced one but
+    /// never a valuation entered by hand, which the user may have typed to correct the sync.
+    /// Returns how many were written.
+    fn sync_valuations(&self, valuations: &[SyncedValuation]) -> Result<usize>;
+    /// Mark a valuation as the quantity-held anchor for its account.
+    fn set_valuation_quantity(&self, entry_id: i64, quantity: Decimal) -> Result<()>;
+    /// Units held in the named account, or None until it has a valuation with a quantity.
+    fn holding(&self, account_name: &str) -> Result<Option<Holding>>;
 }
 
 pub struct SqliteInvestmentStore {
@@ -72,6 +101,27 @@ impl SqliteInvestmentStore {
             amount: parse_decimal(4, &row.get::<_, String>(4)?)?,
             note: row.get(5)?,
         })
+    }
+
+    /// The id of the named account, creating it (last in order) if this ledger has none.
+    /// Names are unique per ledger, case-insensitively.
+    fn synced_account_id(&self, conn: &Connection, name: &str, kind: &str) -> Result<i64> {
+        conn.execute(
+            "
+            INSERT INTO investment_accounts (ledger_id, name, kind, position)
+            SELECT ?1, ?2, ?3, COALESCE(MAX(position), -1) + 1
+            FROM investment_accounts WHERE ledger_id = ?1
+            ON CONFLICT(ledger_id, name) DO NOTHING
+            ",
+            params![self.ledger_id, name, kind],
+        )
+        .map_err(|err| Error::other(format!("Failed to create investment account: {}", err)))?;
+        conn.query_row(
+            "SELECT id FROM investment_accounts WHERE ledger_id = ?1 AND name = ?2",
+            params![self.ledger_id, name],
+            |row| row.get(0),
+        )
+        .map_err(|err| Error::other(format!("Failed to find investment account: {}", err)))
     }
 
     fn assert_owns_account(&self, conn: &Connection, account_id: i64) -> Result<()> {
@@ -356,31 +406,13 @@ impl InvestmentStore for SqliteInvestmentStore {
                 continue;
             }
 
-            // Names are unique per ledger (case-insensitively), so this finds or creates.
-            tx.execute(
-                "
-                INSERT INTO investment_accounts (ledger_id, name, kind, position)
-                SELECT ?1, ?2, ?3, COALESCE(MAX(position), -1) + 1
-                FROM investment_accounts WHERE ledger_id = ?1
-                ON CONFLICT(ledger_id, name) DO NOTHING
-                ",
-                params![self.ledger_id, &flow.account_name, &flow.account_kind],
-            )
-            .map_err(|err| Error::other(format!("Failed to create investment account: {}", err)))?;
-            let account_id: i64 = tx
-                .query_row(
-                    "SELECT id FROM investment_accounts WHERE ledger_id = ?1 AND name = ?2",
-                    params![self.ledger_id, &flow.account_name],
-                    |row| row.get(0),
-                )
-                .map_err(|err| {
-                    Error::other(format!("Failed to find investment account: {}", err))
-                })?;
+            let account_id = self.synced_account_id(&tx, &flow.account_name, &flow.account_kind)?;
 
             tx.execute(
                 "
-                INSERT INTO investment_entries (account_id, date, entry_kind, amount, note, pluggy_id)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                INSERT INTO investment_entries
+                    (account_id, date, entry_kind, amount, note, pluggy_id, quantity)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 ",
                 params![
                     account_id,
@@ -388,7 +420,9 @@ impl InvestmentStore for SqliteInvestmentStore {
                     flow.entry_kind.as_str(),
                     amount.to_string(),
                     flow.note.trim(),
-                    &flow.pluggy_id
+                    &flow.pluggy_id,
+                    flow.quantity
+                        .map(|quantity| quantity.normalize().to_string())
                 ],
             )
             .map_err(|err| Error::other(format!("Failed to save synced entry: {}", err)))?;
@@ -398,6 +432,151 @@ impl InvestmentStore for SqliteInvestmentStore {
         tx.commit()
             .map_err(|err| Error::other(format!("Failed to commit investment sync: {}", err)))?;
         Ok(added)
+    }
+
+    fn sync_valuations(&self, valuations: &[SyncedValuation]) -> Result<usize> {
+        let mut conn = self.ready_connection()?;
+        let tx = conn
+            .transaction()
+            .map_err(|err| Error::other(format!("Failed to begin valuation sync: {}", err)))?;
+
+        let mut written = 0;
+
+        for valuation in valuations {
+            let amount = validate_amount(valuation.amount, InvestmentEntryKind::Valuation)?;
+            let account_id =
+                self.synced_account_id(&tx, &valuation.account_name, &valuation.account_kind)?;
+            let date = valuation.date.format(DATE_FORMAT).to_string();
+            let hand_entered = tx
+                .query_row(
+                    "
+                    SELECT 1 FROM investment_entries
+                    WHERE account_id = ?1 AND date = ?2 AND entry_kind = 'Valuation'
+                      AND pluggy_id IS NULL
+                    ",
+                    params![account_id, &date],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(|err| Error::other(format!("Failed to check valuation: {}", err)))?
+                .is_some();
+            if hand_entered {
+                continue;
+            }
+
+            // A partial unique index can't be an ON CONFLICT target, so clear then insert.
+            tx.execute(
+                "
+                DELETE FROM investment_entries
+                WHERE account_id = ?1 AND date = ?2 AND entry_kind = 'Valuation'
+                ",
+                params![account_id, &date],
+            )
+            .map_err(|err| Error::other(format!("Failed to replace valuation: {}", err)))?;
+            tx.execute(
+                "
+                INSERT INTO investment_entries (account_id, date, entry_kind, amount, note, pluggy_id)
+                VALUES (?1, ?2, 'Valuation', ?3, ?4, ?5)
+                ",
+                params![
+                    account_id,
+                    &date,
+                    amount.to_string(),
+                    valuation.note.trim(),
+                    format!("valuation:{}", date)
+                ],
+            )
+            .map_err(|err| Error::other(format!("Failed to save synced valuation: {}", err)))?;
+            written += 1;
+        }
+
+        tx.commit()
+            .map_err(|err| Error::other(format!("Failed to commit valuation sync: {}", err)))?;
+        Ok(written)
+    }
+
+    fn set_valuation_quantity(&self, entry_id: i64, quantity: Decimal) -> Result<()> {
+        if quantity < Decimal::ZERO {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "Quantity cannot be negative.",
+            ));
+        }
+        let conn = self.ready_connection()?;
+        let updated = conn
+            .execute(
+                "
+                UPDATE investment_entries SET quantity = ?1
+                WHERE id = ?2 AND entry_kind = 'Valuation' AND account_id IN (
+                    SELECT id FROM investment_accounts WHERE ledger_id = ?3
+                )
+                ",
+                params![quantity.normalize().to_string(), entry_id, self.ledger_id],
+            )
+            .map_err(|err| Error::other(format!("Failed to save quantity: {}", err)))?;
+        if updated == 0 {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("Valuation {} was not found.", entry_id),
+            ));
+        }
+        Ok(())
+    }
+
+    fn holding(&self, account_name: &str) -> Result<Option<Holding>> {
+        let conn = self.ready_connection()?;
+        let anchor = conn
+            .query_row(
+                "
+                SELECT e.account_id, e.date, e.quantity
+                FROM investment_entries e
+                JOIN investment_accounts a ON a.id = e.account_id
+                WHERE a.ledger_id = ?1 AND a.name = ?2
+                  AND e.entry_kind = 'Valuation' AND e.quantity IS NOT NULL
+                ORDER BY e.date DESC, e.id DESC
+                LIMIT 1
+                ",
+                params![self.ledger_id, account_name],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        parse_date(1, &row.get::<_, String>(1)?)?,
+                        parse_decimal(2, &row.get::<_, String>(2)?)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|err| Error::other(format!("Failed to load holding: {}", err)))?;
+        let Some((account_id, as_of, mut quantity)) = anchor else {
+            return Ok(None);
+        };
+
+        let mut stmt = conn
+            .prepare(
+                "
+                SELECT entry_kind, quantity FROM investment_entries
+                WHERE account_id = ?1 AND date > ?2 AND quantity IS NOT NULL
+                  AND entry_kind IN ('Contribution', 'Withdrawal')
+                ",
+            )
+            .map_err(|err| Error::other(format!("Failed to prepare holding query: {}", err)))?;
+        let trades = stmt
+            .query_map(
+                params![account_id, as_of.format(DATE_FORMAT).to_string()],
+                |row| {
+                    Ok((
+                        parse_kind(0, &row.get::<_, String>(0)?)?,
+                        parse_decimal(1, &row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .map_err(|err| Error::other(format!("Failed to load trades: {}", err)))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|err| Error::other(format!("Failed to read trades: {}", err)))?;
+        for (kind, units) in trades {
+            quantity += units * kind.flow_sign();
+        }
+        Ok(Some(Holding { as_of, quantity }))
     }
 }
 

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// The latest schema version understood by this build. Bump this and add a matching arm in
 /// [`SqliteDatabase::apply_migration`] whenever the schema changes.
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 
 #[derive(Debug, Clone)]
 pub struct SqliteDatabase {
@@ -259,6 +259,14 @@ impl SqliteDatabase {
                             WHERE pluggy_id IS NOT NULL;"
                     ))
                     .map_err(|err| Error::other(format!("Migration v6 failed: {}", err)))?;
+                }
+                Ok(())
+            }
+            // v7: units held (e.g. BTC). Only the store writes it: an opening valuation
+            // carries the quantity you hold, and each synced trade the units it moved.
+            7 => {
+                if Self::table_exists(conn, "investment_entries")? {
+                    Self::ensure_column(conn, "investment_entries", "quantity", "TEXT NULL")?;
                 }
                 Ok(())
             }

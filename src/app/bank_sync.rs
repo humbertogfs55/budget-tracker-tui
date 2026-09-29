@@ -1,18 +1,26 @@
 use super::state::App;
 use crate::db::category_store::CategoryStore;
 use crate::db::database::SqliteDatabase;
-use crate::db::investment_store::{InvestmentStore, SqliteInvestmentStore};
-use crate::db::transaction_store::{SqliteTransactionStore, TransactionStore};
+use crate::db::investment_store::{
+    InvestmentStore, SqliteInvestmentStore, SyncedFlow, SyncedValuation,
+};
+use crate::db::transaction_store::{SqliteTransactionStore, SyncedTransaction, TransactionStore};
+use crate::market_price::BtcPrices;
 use crate::model::CategoryDraft;
-use crate::pluggy::mapping::{Mapped, map_transaction};
-use crate::pluggy::{self, SyncBatch};
+use crate::pluggy::mapping::{
+    CRYPTO_ACCOUNT, Mapped, crypto_valuation, map_investments, map_transaction, price_crypto_flow,
+};
+use crate::pluggy::{self, Credentials};
 use chrono::{Duration, NaiveDate};
+use rust_decimal::Decimal;
 use std::io::Error;
 use std::sync::mpsc;
 use std::thread;
 
-/// How far back the first sync of a ledger reaches.
-const FIRST_SYNC_DAYS: i64 = 365;
+/// How far back the first sync of a ledger asks for. Pluggy only returns what the bank shares
+/// (about 14 months for Nubank), so asking far back means "everything available", which
+/// keeps investment contributions complete.
+const FIRST_SYNC_DAYS: i64 = 3650;
 /// Later syncs re-read this much before the last one, so pending card purchases that moved
 /// or posted since are refreshed.
 const RESYNC_OVERLAP_DAYS: i64 = 30;
@@ -20,7 +28,52 @@ const RESYNC_OVERLAP_DAYS: i64 = 30;
 /// A fetch running on a background thread, bound to the ledger that was active when it began.
 pub(crate) struct BankSyncJob {
     ledger_id: i64,
-    rx: mpsc::Receiver<Result<SyncBatch, String>>,
+    rx: mpsc::Receiver<Result<SyncOutcome, String>>,
+}
+
+/// Everything the network side produced, ready to write.
+struct SyncOutcome {
+    transactions: Vec<SyncedTransaction>,
+    flows: Vec<SyncedFlow>,
+    valuations: Vec<SyncedValuation>,
+    skipped: usize,
+    /// Live BTC price, fetched only when the crypto account is being tracked.
+    btc_price: Option<Decimal>,
+}
+
+/// Fetch from Pluggy, map it, and price crypto trades. Runs off the UI thread.
+fn collect(
+    credentials: &Credentials,
+    since: NaiveDate,
+    today: NaiveDate,
+    crypto_since: Option<NaiveDate>,
+) -> Result<SyncOutcome, String> {
+    let batch = pluggy::fetch(credentials, since)?;
+    let prices = crypto_since.map(|_| BtcPrices::new());
+    let mut outcome = SyncOutcome {
+        transactions: Vec::new(),
+        flows: Vec::new(),
+        valuations: map_investments(&batch.investments, today),
+        skipped: 0,
+        btc_price: None,
+    };
+    for tx in &batch.transactions {
+        match map_transaction(tx, &batch.categories, today, crypto_since) {
+            Mapped::Transaction(row) => outcome.transactions.push(row),
+            Mapped::Flow(flow) => outcome.flows.push(flow),
+            Mapped::CryptoFlow { flow, at } => {
+                let prices = prices
+                    .as_ref()
+                    .expect("crypto flows only map with a cutoff");
+                outcome.flows.push(price_crypto_flow(flow, prices.at(at)?));
+            }
+            Mapped::Skipped => outcome.skipped += 1,
+        }
+    }
+    if let Some(prices) = &prices {
+        outcome.btc_price = Some(prices.now()?);
+    }
+    Ok(outcome)
 }
 
 impl App {
@@ -57,9 +110,22 @@ impl App {
         };
 
         let today = self.today();
-        let since = match self.last_bank_sync() {
-            Ok(Some(last)) => last - Duration::days(RESYNC_OVERLAP_DAYS),
-            Ok(None) => today - Duration::days(FIRST_SYNC_DAYS),
+        let window = self.last_bank_sync().and_then(|last| {
+            let crypto_since = self
+                .investment_store()
+                .holding(CRYPTO_ACCOUNT)?
+                .map(|holding| holding.as_of);
+            Ok((last, crypto_since))
+        });
+        let (since, crypto_since) = match window {
+            Ok((last, crypto_since)) => {
+                let since = match last {
+                    Some(last) => last - Duration::days(RESYNC_OVERLAP_DAYS),
+                    None => today - Duration::days(FIRST_SYNC_DAYS),
+                };
+                // Reach back far enough to see every trade after a newly set opening.
+                (since.min(crypto_since.unwrap_or(since)), crypto_since)
+            }
             Err(err) => {
                 self.set_status_message(format!("Bank sync: {}", err), None);
                 return;
@@ -68,7 +134,7 @@ impl App {
 
         let (tx, rx) = mpsc::channel();
         thread::spawn(move || {
-            let _ = tx.send(pluggy::fetch(&credentials, since));
+            let _ = tx.send(collect(&credentials, since, today, crypto_since));
         });
         self.bank_sync_job = Some(BankSyncJob {
             ledger_id: self.active_ledger_id,
@@ -94,7 +160,7 @@ impl App {
         self.bank_sync_job = None;
 
         let message = match result {
-            Ok(batch) => match self.apply_bank_sync(ledger_id, batch) {
+            Ok(outcome) => match self.apply_bank_sync(ledger_id, outcome) {
                 Ok(message) => message,
                 Err(err) => format!("Bank sync failed to save: {}", err),
             },
@@ -104,18 +170,15 @@ impl App {
         true
     }
 
-    fn apply_bank_sync(&mut self, ledger_id: i64, batch: SyncBatch) -> Result<String, Error> {
+    fn apply_bank_sync(&mut self, ledger_id: i64, outcome: SyncOutcome) -> Result<String, Error> {
         let today = self.today();
-        let mut transactions = Vec::new();
-        let mut flows = Vec::new();
-        let mut skipped = 0;
-        for tx in &batch.transactions {
-            match map_transaction(tx, &batch.categories, today) {
-                Mapped::Transaction(row) => transactions.push(row),
-                Mapped::Flow(flow) => flows.push(flow),
-                Mapped::Skipped => skipped += 1,
-            }
-        }
+        let SyncOutcome {
+            transactions,
+            flows,
+            mut valuations,
+            skipped,
+            btc_price,
+        } = outcome;
 
         // Pluggy's categories join the shared catalog so they can be picked and budgeted.
         let category_store = self.category_store();
@@ -140,8 +203,15 @@ impl App {
         let database = SqliteDatabase::new(&self.database_path);
         let summary =
             SqliteTransactionStore::new(database.clone(), ledger_id).sync_merge(&transactions)?;
-        let flows_added =
-            SqliteInvestmentStore::new(database.clone(), ledger_id).sync_flows(&flows)?;
+        let investments = SqliteInvestmentStore::new(database.clone(), ledger_id);
+        let flows_added = investments.sync_flows(&flows)?;
+        // Valued after the flows are in, so today's trades count toward the holding.
+        if let Some(price) = btc_price
+            && let Some(holding) = investments.holding(CRYPTO_ACCOUNT)?
+        {
+            valuations.push(crypto_valuation(holding, price, today));
+        }
+        let valuations_written = investments.sync_valuations(&valuations)?;
         let conn = database.ready_connection("bank sync")?;
         database.set_metadata_value(
             &conn,
@@ -156,8 +226,8 @@ impl App {
         }
 
         Ok(format!(
-            "Bank sync: {} new, {} updated, {} investment moves, {} skipped.",
-            summary.added, summary.updated, flows_added, skipped
+            "Bank sync: {} new, {} updated, {} investment moves, {} valuations, {} skipped.",
+            summary.added, summary.updated, flows_added, valuations_written, skipped
         ))
     }
 

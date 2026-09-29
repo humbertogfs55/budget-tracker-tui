@@ -13,6 +13,14 @@ pub const STALE_VALUATION_DAYS: i64 = 30;
 const STATUS_ACTIVE: &str = "Active";
 const STATUS_ARCHIVED: &str = "Archived";
 
+/// What an account held when you started tracking it.
+struct OpeningPosition {
+    date: NaiveDate,
+    value: Decimal,
+    invested: Decimal,
+    quantity: Option<Decimal>,
+}
+
 impl App {
     pub(crate) fn today(&self) -> NaiveDate {
         chrono::Local::now().date_naive()
@@ -352,28 +360,27 @@ impl App {
             }
         };
 
-        let opening_error = opening.and_then(|(date, value, invested)| {
-            let mut entries = Vec::new();
-            // Nothing contributed is a real position: a gift, a match, something inherited.
-            if invested > Decimal::ZERO {
-                entries.push((InvestmentEntryKind::Contribution, invested));
-            }
-            entries.push((InvestmentEntryKind::Valuation, value));
-
-            entries
-                .into_iter()
-                .try_for_each(|(entry_kind, amount)| {
-                    store
-                        .save_entry(&InvestmentEntryDraft {
-                            account_id,
-                            date,
-                            entry_kind,
-                            amount,
-                            note: "Opening position".to_string(),
-                        })
-                        .map(|_| ())
+        let opening_error = opening.and_then(|opening| {
+            let save = |entry_kind, amount| {
+                store.save_entry(&InvestmentEntryDraft {
+                    account_id,
+                    date: opening.date,
+                    entry_kind,
+                    amount,
+                    note: "Opening position".to_string(),
                 })
-                .err()
+            };
+            // Nothing contributed is a real position: a gift, a match, something inherited.
+            let result = (opening.invested > Decimal::ZERO)
+                .then(|| save(InvestmentEntryKind::Contribution, opening.invested))
+                .transpose()
+                .and_then(|_| save(InvestmentEntryKind::Valuation, opening.value))
+                // The quantity rides on the opening valuation: it's what later trades add to.
+                .and_then(|valuation_id| match opening.quantity {
+                    Some(quantity) => store.set_valuation_quantity(valuation_id, quantity),
+                    None => Ok(()),
+                });
+            result.err()
         });
 
         let was_edit = self.editing_investment_account_id.is_some();
@@ -394,7 +401,7 @@ impl App {
         }
     }
 
-    fn parse_opening_position(&self) -> Result<Option<(NaiveDate, Decimal, Decimal)>, String> {
+    fn parse_opening_position(&self) -> Result<Option<OpeningPosition>, String> {
         if !self.investment_opening_fields_active() {
             return Ok(None);
         }
@@ -402,9 +409,14 @@ impl App {
         let value_str = self.investment_account_fields[InvestmentAccountField::OpeningValue].trim();
         let invested_str =
             self.investment_account_fields[InvestmentAccountField::OpeningInvested].trim();
+        let quantity_str =
+            self.investment_account_fields[InvestmentAccountField::OpeningQuantity].trim();
         if value_str.is_empty() {
-            if !invested_str.is_empty() {
-                return Err("Set a starting value to go with the contributed amount".to_string());
+            if !invested_str.is_empty() || !quantity_str.is_empty() {
+                return Err(
+                    "Set a starting value to go with the contributed amount and quantity"
+                        .to_string(),
+                );
             }
             return Ok(None);
         }
@@ -420,7 +432,20 @@ impl App {
         let date = NaiveDate::parse_from_str(date_str, DATE_FORMAT)
             .map_err(|_| format!("Invalid As Of date (expected {})", DATE_FORMAT))?;
 
-        Ok(Some((date, value, invested)))
+        let quantity = if quantity_str.is_empty() {
+            None
+        } else {
+            Some(crate::validation::validate_non_negative_amount_string(
+                quantity_str,
+            )?)
+        };
+
+        Ok(Some(OpeningPosition {
+            date,
+            value,
+            invested,
+            quantity,
+        }))
     }
 
     // --- Entry editor ---

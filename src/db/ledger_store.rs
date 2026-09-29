@@ -207,8 +207,9 @@ impl LedgerStore for SqliteLedgerStore {
         tx.execute(
             "
             INSERT INTO investment_entries
-                (account_id, date, entry_kind, amount, note, transaction_id, pluggy_id)
-            SELECT copy.id, e.date, e.entry_kind, e.amount, e.note, e.transaction_id, e.pluggy_id
+                (account_id, date, entry_kind, amount, note, transaction_id, pluggy_id, quantity)
+            SELECT copy.id, e.date, e.entry_kind, e.amount, e.note, e.transaction_id, e.pluggy_id,
+                e.quantity
             FROM investment_entries e
             JOIN investment_accounts source ON source.id = e.account_id
             JOIN investment_accounts copy

@@ -55,6 +55,7 @@ fn handle_account_editor(app: &mut App, key_event: KeyEvent) {
             focused,
             InvestmentAccountField::OpeningValue
                 | InvestmentAccountField::OpeningInvested
+                | InvestmentAccountField::OpeningQuantity
                 | InvestmentAccountField::OpeningDate
         );
 

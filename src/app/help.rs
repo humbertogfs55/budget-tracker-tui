@@ -111,7 +111,7 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
                 "Sync bank (Pluggy)",
                 "Actions",
                 Some(
-                    "Pull new transactions from your bank through Pluggy. Also runs on startup. Needs PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET and PLUGGY_ITEM_IDS in the environment or in pluggy.env next to config.json.",
+                    "Pull new transactions from your bank through Pluggy. Also runs on startup. Needs PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET and PLUGGY_ITEM_IDS in the environment or in pluggy.env next to config.json. Crypto is tracked once you add an investment account named Cripto with a Quantity Held: later trades are priced at the minute they happened and the account is valued at the live BTC price.",
                 ),
             ),
             KeyBindingInfo::new(

@@ -147,7 +147,11 @@ fn render_stats_panel(f: &mut Frame, app: &App, area: Rect) {
 
     let title = match account_id.and_then(|id| app.portfolio.account(id)) {
         Some(account) => {
-            let mut spans = vec![heading(&account.name)];
+            let mut spans = vec![heading(&format!(
+                "{} {}",
+                kind_icon(&account.kind),
+                account.name
+            ))];
             if !account.kind.trim().is_empty() {
                 spans.push(Span::styled(" | ", Style::default().fg(PANEL_CHROME_COLOR)));
                 spans.push(Span::styled(
@@ -354,6 +358,59 @@ fn compact_amount(value: f64) -> String {
     }
 }
 
+/// Nerd Font icon for an account, picked from its free-text Type (English or Portuguese).
+fn kind_icon(kind: &str) -> &'static str {
+    let kind = kind.to_lowercase();
+    // Whole words, matched by prefix ("saving" covers "savings"), so "ira" can't match
+    // inside "carteira". Keys with a space are phrases and match anywhere.
+    let words: Vec<&str> = kind.split(|c: char| !c.is_alphanumeric()).collect();
+    let has = |keys: &[&str]| {
+        keys.iter().any(|key| {
+            if key.contains(' ') {
+                kind.contains(key)
+            } else {
+                words.iter().any(|word| word.starts_with(key))
+            }
+        })
+    };
+    if has(&["crypto", "cripto", "bitcoin", "btc"]) {
+        "\u{f15a}" // fa-btc
+    } else if has(&[
+        "brokerage",
+        "stock",
+        "equity",
+        "etf",
+        "ações",
+        "acoes",
+        "variável",
+    ]) {
+        "\u{f201}" // fa-line_chart
+    } else if has(&[
+        "saving",
+        "poupança",
+        "rdb",
+        "cdb",
+        "fixed income",
+        "renda fixa",
+        "caixinha",
+    ]) {
+        "\u{eda3}" // fa-piggy_bank
+    } else if has(&[
+        "retirement",
+        "pension",
+        "rrsp",
+        "401k",
+        "ira",
+        "previdência",
+    ]) {
+        "\u{f0e9}" // fa-umbrella
+    } else if has(&["real estate", "property", "imóve", "imove"]) {
+        "\u{f015}" // fa-house
+    } else {
+        "\u{f0b1}" // fa-briefcase
+    }
+}
+
 fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     let today = app.today();
     let archived = app.show_archived_investments;
@@ -388,9 +445,14 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
             };
 
             let name = if show_kind || account.kind.trim().is_empty() {
-                account.name.clone()
+                format!("{} {}", kind_icon(&account.kind), account.name)
             } else {
-                format!("{} ({})", account.name, account.kind.trim())
+                format!(
+                    "{} {} ({})",
+                    kind_icon(&account.kind),
+                    account.name,
+                    account.kind.trim()
+                )
             };
             let name_style = if account.archived {
                 Style::default().fg(Color::DarkGray)
@@ -637,6 +699,7 @@ pub fn render_investment_account_editor(f: &mut Frame, app: &App, area: Rect) {
                     field,
                     crate::app::fields::InvestmentAccountField::OpeningValue
                         | crate::app::fields::InvestmentAccountField::OpeningInvested
+                        | crate::app::fields::InvestmentAccountField::OpeningQuantity
                         | crate::app::fields::InvestmentAccountField::OpeningDate
                 )
                 .then_some("Edit the account's entries instead")
@@ -673,4 +736,22 @@ pub fn render_investment_entry_editor(f: &mut Frame, app: &App, area: Rect) {
 
 fn right(text: String) -> Line<'static> {
     Line::from(text).alignment(Alignment::Right)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::kind_icon;
+
+    #[test]
+    fn icon_follows_the_account_type() {
+        assert_eq!(kind_icon("Crypto"), "\u{f15a}");
+        assert_eq!(kind_icon("Brokerage"), "\u{f201}");
+        assert_eq!(kind_icon("Savings"), "\u{eda3}");
+        assert_eq!(kind_icon("Retirement (RRSP)"), "\u{f0e9}");
+        assert_eq!(kind_icon("Real Estate"), "\u{f015}");
+        assert_eq!(kind_icon(""), "\u{f0b1}");
+        // "ira" is a word of its own, not the end of "Carteira".
+        assert_eq!(kind_icon("Carteira"), "\u{f0b1}");
+        assert_eq!(kind_icon("Roth IRA"), "\u{f0e9}");
+    }
 }

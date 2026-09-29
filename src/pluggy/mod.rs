@@ -104,10 +104,20 @@ pub struct Category {
     pub parent_description: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Investment {
+    /// EQUITY, ETF, FIXED_INCOME, MUTUAL_FUND, SECURITY, COE or OTHER.
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub balance: Option<Decimal>,
+}
+
 /// Everything one sync needs, fetched up front so the database write happens in one go.
 pub struct SyncBatch {
     pub transactions: Vec<Transaction>,
     pub categories: HashMap<String, Category>,
+    pub investments: Vec<Investment>,
 }
 
 #[derive(Deserialize)]
@@ -124,7 +134,7 @@ struct Auth {
 }
 
 /// Fetch every transaction dated on or after `since` for all bank and credit accounts of the
-/// configured items.
+/// configured items, plus their current investment holdings.
 pub fn fetch(credentials: &Credentials, since: NaiveDate) -> Result<SyncBatch, String> {
     let client = Client::connect(credentials)?;
 
@@ -136,7 +146,13 @@ pub fn fetch(credentials: &Credentials, since: NaiveDate) -> Result<SyncBatch, S
         .collect();
 
     let mut transactions = Vec::new();
+    let mut investments = Vec::new();
     for item_id in &credentials.item_ids {
+        investments.extend(
+            client
+                .get::<Page<Investment>>(&format!("/investments?itemId={}", item_id))?
+                .results,
+        );
         let accounts = client.get::<Page<Account>>(&format!("/accounts?itemId={}", item_id))?;
         for account in accounts.results {
             if account.kind != "BANK" && account.kind != "CREDIT" {
@@ -149,6 +165,7 @@ pub fn fetch(credentials: &Credentials, since: NaiveDate) -> Result<SyncBatch, S
     Ok(SyncBatch {
         transactions,
         categories,
+        investments,
     })
 }
 

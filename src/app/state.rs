@@ -206,7 +206,7 @@ pub struct App {
     pub(crate) investment_range: InvestmentRange,
     pub(crate) show_archived_investments: bool,
     pub(crate) investment_detail_id: Option<i64>,
-    pub(crate) investment_account_fields: FieldSet<InvestmentAccountField, 6>,
+    pub(crate) investment_account_fields: FieldSet<InvestmentAccountField, 7>,
     pub(crate) investment_account_cursor: usize,
     pub(crate) editing_investment_account_id: Option<i64>,
     pub(crate) investment_entry_fields: FieldSet<InvestmentEntryField, 4>,

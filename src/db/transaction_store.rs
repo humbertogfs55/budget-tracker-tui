@@ -395,7 +395,7 @@ mod tests {
     use crate::db::backup::{self, BackupKind};
     use crate::db::category_store::CategoryStore;
     use crate::db::database::SCHEMA_VERSION;
-    use crate::db::investment_store::{InvestmentStore, SqliteInvestmentStore};
+    use crate::db::investment_store::{InvestmentStore, SqliteInvestmentStore, SyncedFlow};
     use crate::db::ledger_store::{DEFAULT_LEDGER_ID, LedgerStore, SqliteLedgerStore};
     use crate::model::{
         BudgetSchedule, InvestmentAccountDraft, InvestmentEntryDraft, InvestmentEntryKind,
@@ -1292,7 +1292,8 @@ mod tests {
             date: NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
             entry_kind: kind,
             amount: Decimal::from_str("50").unwrap(),
-            note: "Depósito no saldo compartilhado".to_string(),
+            note: "Aplicação RDB".to_string(),
+            quantity: None,
         };
 
         let first = [
@@ -1306,6 +1307,159 @@ mod tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].kind, "Savings");
         assert_eq!(store.list_entries().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn synced_valuation_joins_the_flows_account_and_replaces_same_day() {
+        let temp = TempDb::new();
+        temp.store().list().unwrap(); // run migrations
+        let store = investments(&temp, DEFAULT_LEDGER_ID);
+        let day = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let later = NaiveDate::from_ymd_opt(2026, 2, 1).unwrap();
+
+        store
+            .sync_flows(&[crate::db::investment_store::SyncedFlow {
+                pluggy_id: "buy".to_string(),
+                account_name: "Renda Variável".to_string(),
+                account_kind: "Brokerage".to_string(),
+                date: day,
+                entry_kind: InvestmentEntryKind::Contribution,
+                amount: Decimal::from_str("1000").unwrap(),
+                note: "Compra de Renda Variável".to_string(),
+                quantity: None,
+            }])
+            .unwrap();
+        let valuation = |amount: &str| crate::db::investment_store::SyncedValuation {
+            account_name: "Renda Variável".to_string(),
+            account_kind: "Brokerage".to_string(),
+            date: later,
+            amount: Decimal::from_str(amount).unwrap(),
+            note: "Synced from bank".to_string(),
+        };
+        store.sync_valuations(&[valuation("950")]).unwrap();
+        store.sync_valuations(&[valuation("980")]).unwrap();
+
+        let accounts = store.list_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+        let account_id = accounts[0].id;
+        let entries = store.list_entries().unwrap();
+        assert_eq!(entries.len(), 2);
+
+        let position = Portfolio::new(accounts, entries).position(account_id, later);
+        assert_eq!(position.invested, Decimal::from_str("1000").unwrap());
+        assert_eq!(position.value, Decimal::from_str("980").unwrap());
+        assert_eq!(position.as_of, Some(later));
+    }
+
+    fn crypto_trade(
+        id: &str,
+        date: NaiveDate,
+        kind: InvestmentEntryKind,
+        units: &str,
+    ) -> SyncedFlow {
+        SyncedFlow {
+            pluggy_id: id.to_string(),
+            account_name: "Cripto".to_string(),
+            account_kind: "Crypto".to_string(),
+            date,
+            entry_kind: kind,
+            amount: Decimal::from_str("50").unwrap(),
+            note: "Compra de criptomoedas".to_string(),
+            quantity: Some(Decimal::from_str(units).unwrap()),
+        }
+    }
+
+    #[test]
+    fn holding_is_the_opening_quantity_plus_later_trades() {
+        let temp = TempDb::new();
+        temp.store().list().unwrap(); // run migrations
+        let store = investments(&temp, DEFAULT_LEDGER_ID);
+        let day = |d| NaiveDate::from_ymd_opt(2026, 1, d).unwrap();
+        assert_eq!(store.holding("Cripto").unwrap(), None);
+
+        // Opening position as the account form saves it.
+        let account_id = store
+            .create_account(&InvestmentAccountDraft {
+                name: "Cripto".to_string(),
+                kind: "Crypto".to_string(),
+                archived: false,
+            })
+            .unwrap();
+        let opening = store
+            .save_entry(&InvestmentEntryDraft {
+                account_id,
+                date: day(10),
+                entry_kind: InvestmentEntryKind::Valuation,
+                amount: Decimal::from_str("1000").unwrap(),
+                note: "Opening position".to_string(),
+            })
+            .unwrap();
+        store
+            .set_valuation_quantity(opening, Decimal::from_str("0.002").unwrap())
+            .unwrap();
+
+        store
+            .sync_flows(&[
+                // Same day as the opening: already inside the opening quantity.
+                crypto_trade(
+                    "same-day",
+                    day(10),
+                    InvestmentEntryKind::Contribution,
+                    "0.5",
+                ),
+                crypto_trade("buy", day(12), InvestmentEntryKind::Contribution, "0.0001"),
+                crypto_trade("sell", day(14), InvestmentEntryKind::Withdrawal, "0.00005"),
+            ])
+            .unwrap();
+
+        assert_eq!(
+            store.holding("Cripto").unwrap(),
+            Some(crate::db::investment_store::Holding {
+                as_of: day(10),
+                quantity: Decimal::from_str("0.00205").unwrap(),
+            })
+        );
+    }
+
+    #[test]
+    fn synced_valuation_never_replaces_one_entered_by_hand() {
+        let temp = TempDb::new();
+        temp.store().list().unwrap(); // run migrations
+        let store = investments(&temp, DEFAULT_LEDGER_ID);
+        let day = NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let synced = |amount: &str| crate::db::investment_store::SyncedValuation {
+            account_name: "Cripto".to_string(),
+            account_kind: "Crypto".to_string(),
+            date: day,
+            amount: Decimal::from_str(amount).unwrap(),
+            note: "Synced from bank".to_string(),
+        };
+
+        assert_eq!(store.sync_valuations(&[synced("100")]).unwrap(), 1);
+        assert_eq!(store.sync_valuations(&[synced("110")]).unwrap(), 1);
+        let values = |store: &SqliteInvestmentStore| -> Vec<Decimal> {
+            store
+                .list_entries()
+                .unwrap()
+                .into_iter()
+                .map(|e| e.amount)
+                .collect()
+        };
+        assert_eq!(values(&store), vec![Decimal::from_str("110").unwrap()]);
+
+        // The user corrects today's value by hand; later syncs leave it alone.
+        let account_id = store.list_accounts().unwrap()[0].id;
+        store
+            .save_entry(&InvestmentEntryDraft {
+                account_id,
+                date: day,
+                entry_kind: InvestmentEntryKind::Valuation,
+                amount: Decimal::from_str("123.45").unwrap(),
+                note: String::new(),
+            })
+            .unwrap();
+        assert_eq!(store.sync_valuations(&[synced("120")]).unwrap(), 0);
+        assert_eq!(values(&store), vec![Decimal::from_str("123.45").unwrap()]);
     }
 
     #[test]

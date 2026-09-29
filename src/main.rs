@@ -3,6 +3,7 @@ mod config;
 mod csv_io;
 mod db;
 mod events;
+mod market_price;
 mod model;
 mod pluggy;
 mod recurring;
