@@ -1,3 +1,4 @@
+use super::bank_sync::BankSyncJob;
 use crate::app::fields::{
     AddEditField, AdvancedFilterField, CategoryEditField, FieldSet, InvestmentAccountField,
     InvestmentEntryField, RecurringField, SelectingField,
@@ -234,6 +235,8 @@ pub struct App {
     pub(crate) update_available_version: Option<String>,
     pub(crate) show_update_popup: bool,
     pub(crate) update_rx: mpsc::Receiver<Option<String>>,
+    // Bank sync (Pluggy); Some while a fetch is running
+    pub(crate) bank_sync_job: Option<BankSyncJob>,
 }
 
 impl App {
@@ -492,6 +495,7 @@ impl App {
             update_available_version: None,
             show_update_popup: false,
             update_rx: rx,
+            bank_sync_job: None,
         };
         if let Some(version) = Self::newer_schema_version(&app.database_path) {
             app.status_message = Some(format!(
@@ -526,6 +530,9 @@ impl App {
 
         // Generate recurring transactions up to today (or the configured forecast horizon)
         app.generate_recurring_transactions();
+        if !app.should_quit {
+            app.start_bank_sync(false);
+        }
 
         app
     }

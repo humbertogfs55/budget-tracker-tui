@@ -1,5 +1,6 @@
 pub mod add_edit;
 pub mod backup_manager;
+pub mod bank_sync;
 pub mod budget;
 pub mod category_manager;
 pub mod category_select;

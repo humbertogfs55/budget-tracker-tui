@@ -4,6 +4,7 @@ mod csv_io;
 mod db;
 mod events;
 mod model;
+mod pluggy;
 mod recurring;
 mod ui;
 mod validation;

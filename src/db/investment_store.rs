@@ -4,10 +4,23 @@ use crate::model::{
     InvestmentEntryKind,
 };
 use chrono::NaiveDate;
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use rust_decimal::Decimal;
 use std::io::{Error, ErrorKind, Result};
 use std::str::FromStr;
+
+/// A move between the bank account and an investment, pulled from the bank. It lands in the
+/// named account (created on first use) as a contribution or withdrawal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncedFlow {
+    pub pluggy_id: String,
+    pub account_name: String,
+    pub account_kind: String,
+    pub date: NaiveDate,
+    pub entry_kind: InvestmentEntryKind,
+    pub amount: Decimal,
+    pub note: String,
+}
 
 pub trait InvestmentStore {
     fn list_accounts(&self) -> Result<Vec<InvestmentAccount>>;
@@ -19,6 +32,8 @@ pub trait InvestmentStore {
     fn save_entry(&self, draft: &InvestmentEntryDraft) -> Result<i64>;
     fn update_entry(&self, id: i64, draft: &InvestmentEntryDraft) -> Result<()>;
     fn delete_entry(&self, id: i64) -> Result<()>;
+    /// Record bank flows not already recorded in this ledger. Returns how many were added.
+    fn sync_flows(&self, flows: &[SyncedFlow]) -> Result<usize>;
 }
 
 pub struct SqliteInvestmentStore {
@@ -313,6 +328,76 @@ impl InvestmentStore for SqliteInvestmentStore {
             ));
         }
         Ok(())
+    }
+
+    fn sync_flows(&self, flows: &[SyncedFlow]) -> Result<usize> {
+        let mut conn = self.ready_connection()?;
+        let tx = conn
+            .transaction()
+            .map_err(|err| Error::other(format!("Failed to begin investment sync: {}", err)))?;
+
+        let mut added = 0;
+        for flow in flows {
+            let amount = validate_amount(flow.amount, flow.entry_kind)?;
+            let already_synced = tx
+                .query_row(
+                    "
+                    SELECT 1 FROM investment_entries e
+                    JOIN investment_accounts a ON a.id = e.account_id
+                    WHERE a.ledger_id = ?1 AND e.pluggy_id = ?2
+                    ",
+                    params![self.ledger_id, &flow.pluggy_id],
+                    |_| Ok(()),
+                )
+                .optional()
+                .map_err(|err| Error::other(format!("Failed to look up synced entry: {}", err)))?
+                .is_some();
+            if already_synced {
+                continue;
+            }
+
+            // Names are unique per ledger (case-insensitively), so this finds or creates.
+            tx.execute(
+                "
+                INSERT INTO investment_accounts (ledger_id, name, kind, position)
+                SELECT ?1, ?2, ?3, COALESCE(MAX(position), -1) + 1
+                FROM investment_accounts WHERE ledger_id = ?1
+                ON CONFLICT(ledger_id, name) DO NOTHING
+                ",
+                params![self.ledger_id, &flow.account_name, &flow.account_kind],
+            )
+            .map_err(|err| Error::other(format!("Failed to create investment account: {}", err)))?;
+            let account_id: i64 = tx
+                .query_row(
+                    "SELECT id FROM investment_accounts WHERE ledger_id = ?1 AND name = ?2",
+                    params![self.ledger_id, &flow.account_name],
+                    |row| row.get(0),
+                )
+                .map_err(|err| {
+                    Error::other(format!("Failed to find investment account: {}", err))
+                })?;
+
+            tx.execute(
+                "
+                INSERT INTO investment_entries (account_id, date, entry_kind, amount, note, pluggy_id)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                ",
+                params![
+                    account_id,
+                    flow.date.format(DATE_FORMAT).to_string(),
+                    flow.entry_kind.as_str(),
+                    amount.to_string(),
+                    flow.note.trim(),
+                    &flow.pluggy_id
+                ],
+            )
+            .map_err(|err| Error::other(format!("Failed to save synced entry: {}", err)))?;
+            added += 1;
+        }
+
+        tx.commit()
+            .map_err(|err| Error::other(format!("Failed to commit investment sync: {}", err)))?;
+        Ok(added)
     }
 }
 

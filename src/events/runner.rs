@@ -38,6 +38,10 @@ where
             needs_redraw = true;
         }
 
+        if app.poll_bank_sync() {
+            needs_redraw = true;
+        }
+
         if needs_redraw {
             terminal.draw(|f| ui(f, app))?;
             needs_redraw = false;

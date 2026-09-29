@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 /// The latest schema version understood by this build. Bump this and add a matching arm in
 /// [`SqliteDatabase::apply_migration`] whenever the schema changes.
-pub const SCHEMA_VERSION: i64 = 5;
+pub const SCHEMA_VERSION: i64 = 6;
 
 #[derive(Debug, Clone)]
 pub struct SqliteDatabase {
@@ -244,6 +244,24 @@ impl SqliteDatabase {
                     ",
                 )
                 .map_err(|err| Error::other(format!("Migration v5 failed: {}", err))),
+            // v6: bank sync. Rows pulled from Pluggy remember their Pluggy id so a re-sync
+            // updates them in place instead of duplicating, and hand-entered rows stay NULL.
+            6 => {
+                for (table, scope) in [("transactions", "ledger_id"), ("investment_entries", "account_id")] {
+                    // Hand-built legacy databases may predate a table; there is nothing to tag.
+                    if !Self::table_exists(conn, table)? {
+                        continue;
+                    }
+                    Self::ensure_column(conn, table, "pluggy_id", "TEXT NULL")?;
+                    conn.execute_batch(&format!(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_{table}_pluggy
+                            ON {table}({scope}, pluggy_id)
+                            WHERE pluggy_id IS NOT NULL;"
+                    ))
+                    .map_err(|err| Error::other(format!("Migration v6 failed: {}", err)))?;
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -256,6 +274,15 @@ impl SqliteDatabase {
         conn.execute(&format!("ALTER TABLE {} DROP COLUMN {}", table, column), [])
             .map_err(|err| Error::other(format!("Failed to drop {}.{}: {}", table, column, err)))?;
         Ok(())
+    }
+
+    fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            [table],
+            |row| row.get(0),
+        )
+        .map_err(|err| Error::other(format!("Failed to inspect schema for {}: {}", table, err)))
     }
 
     fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {

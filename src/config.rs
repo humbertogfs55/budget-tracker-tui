@@ -23,19 +23,17 @@ pub(crate) struct AppSettings {
     pub(crate) instance_id: Option<String>,
 }
 
+/// The app's own directory under the user config directory (not created here).
+pub(crate) fn app_config_dir() -> Result<PathBuf, Error> {
+    dirs::config_dir()
+        .map(|path| path.join(APP_CONFIG_SUBDIR))
+        .ok_or_else(|| Error::new(ErrorKind::NotFound, "Could not find user config directory"))
+}
+
 fn get_config_file_path() -> Result<PathBuf, Error> {
-    match dirs::config_dir() {
-        Some(mut path) => {
-            path.push(APP_CONFIG_SUBDIR);
-            create_dir_all(&path)?; // Ensure the directory exists
-            path.push(CONFIG_FILE_NAME);
-            Ok(path)
-        }
-        None => Err(Error::new(
-            ErrorKind::NotFound,
-            "Could not find user config directory",
-        )),
-    }
+    let dir = app_config_dir()?;
+    create_dir_all(&dir)?; // Ensure the directory exists
+    Ok(dir.join(CONFIG_FILE_NAME))
 }
 
 pub(crate) fn load_settings() -> Result<AppSettings, Error> {

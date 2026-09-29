@@ -158,7 +158,8 @@ impl LedgerStore for SqliteLedgerStore {
                 subcategory,
                 is_recurring,
                 recurrence_frequency,
-                recurrence_end_date
+                recurrence_end_date,
+                pluggy_id
             )
             SELECT
                 ?1,
@@ -170,7 +171,8 @@ impl LedgerStore for SqliteLedgerStore {
                 subcategory,
                 is_recurring,
                 recurrence_frequency,
-                recurrence_end_date
+                recurrence_end_date,
+                pluggy_id
             FROM transactions
             WHERE ledger_id = ?2
             ",
@@ -205,8 +207,8 @@ impl LedgerStore for SqliteLedgerStore {
         tx.execute(
             "
             INSERT INTO investment_entries
-                (account_id, date, entry_kind, amount, note, transaction_id)
-            SELECT copy.id, e.date, e.entry_kind, e.amount, e.note, e.transaction_id
+                (account_id, date, entry_kind, amount, note, transaction_id, pluggy_id)
+            SELECT copy.id, e.date, e.entry_kind, e.amount, e.note, e.transaction_id, e.pluggy_id
             FROM investment_entries e
             JOIN investment_accounts source ON source.id = e.account_id
             JOIN investment_accounts copy

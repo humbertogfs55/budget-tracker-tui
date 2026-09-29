@@ -3,7 +3,7 @@ use crate::model::{
     DATE_FORMAT, RecurrenceFrequency, Transaction, TransactionDraft, TransactionType,
 };
 use chrono::NaiveDate;
-use rusqlite::{Connection, Error as SqlError, Row, params, types::Type};
+use rusqlite::{Connection, Error as SqlError, OptionalExtension, Row, params, types::Type};
 use rust_decimal::Decimal;
 use std::io::{Error, ErrorKind, Result};
 use std::str::FromStr;
@@ -13,6 +13,20 @@ use std::str::FromStr;
 pub struct ImportSummary {
     pub added: usize,
     pub skipped: usize,
+}
+
+/// Outcome of a bank-sync merge.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SyncSummary {
+    pub added: usize,
+    pub updated: usize,
+}
+
+/// A transaction pulled from the bank, keyed on its Pluggy id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SyncedTransaction {
+    pub pluggy_id: String,
+    pub draft: TransactionDraft,
 }
 
 /// Persistence for transactions. Only **real** rows are stored (regular transactions and
@@ -26,6 +40,10 @@ pub trait TransactionStore {
     /// Insert every row that is not already present (matched on its natural key). Runs in a
     /// single transaction; duplicates within the batch are skipped too.
     fn import_merge(&self, rows: &[Transaction]) -> Result<ImportSummary>;
+    /// Insert bank rows by Pluggy id, or refresh the date, amount and type of rows already
+    /// synced (a pending purchase can shift as it posts). Category, subcategory and
+    /// description are only written on insert, so edits made in the app survive a re-sync.
+    fn sync_merge(&self, rows: &[SyncedTransaction]) -> Result<SyncSummary>;
 }
 
 pub struct SqliteTransactionStore {
@@ -79,6 +97,7 @@ impl SqliteTransactionStore {
         conn: &Connection,
         ledger_id: i64,
         draft: &TransactionDraft,
+        pluggy_id: Option<&str>,
     ) -> Result<i64> {
         conn.execute(
             "
@@ -92,8 +111,9 @@ impl SqliteTransactionStore {
                 subcategory,
                 is_recurring,
                 recurrence_frequency,
-                recurrence_end_date
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                recurrence_end_date,
+                pluggy_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             ",
             params![
                 ledger_id,
@@ -108,6 +128,7 @@ impl SqliteTransactionStore {
                 draft
                     .recurrence_end_date
                     .map(|date| date.format(DATE_FORMAT).to_string()),
+                pluggy_id,
             ],
         )
         .map_err(|err| Error::other(format!("Failed to insert transaction: {}", err)))?;
@@ -177,7 +198,7 @@ impl TransactionStore for SqliteTransactionStore {
 
     fn insert(&self, draft: &TransactionDraft) -> Result<i64> {
         let conn = self.ready_connection()?;
-        Self::insert_with_conn(&conn, self.ledger_id, draft)
+        Self::insert_with_conn(&conn, self.ledger_id, draft, None)
     }
 
     fn update(&self, id: i64, draft: &TransactionDraft) -> Result<()> {
@@ -259,13 +280,66 @@ impl TransactionStore for SqliteTransactionStore {
             if Self::natural_key_exists(&tx, self.ledger_id, row)? {
                 summary.skipped += 1;
             } else {
-                Self::insert_with_conn(&tx, self.ledger_id, &row.to_draft())?;
+                Self::insert_with_conn(&tx, self.ledger_id, &row.to_draft(), None)?;
                 summary.added += 1;
             }
         }
 
         tx.commit()
             .map_err(|err| Error::other(format!("Failed to commit import: {}", err)))?;
+        Ok(summary)
+    }
+
+    fn sync_merge(&self, rows: &[SyncedTransaction]) -> Result<SyncSummary> {
+        let mut conn = self.ready_connection()?;
+        let tx = conn
+            .transaction()
+            .map_err(|err| Error::other(format!("Failed to begin bank sync: {}", err)))?;
+
+        let mut ordered: Vec<&SyncedTransaction> = rows.iter().collect();
+        ordered.sort_by_key(|row| row.draft.date);
+
+        let mut summary = SyncSummary::default();
+        for row in ordered {
+            let existing: Option<i64> = tx
+                .query_row(
+                    "SELECT id FROM transactions WHERE ledger_id = ?1 AND pluggy_id = ?2",
+                    params![self.ledger_id, &row.pluggy_id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|err| Error::other(format!("Failed to look up synced row: {}", err)))?;
+
+            match existing {
+                Some(id) => {
+                    summary.updated += tx
+                        .execute(
+                            "
+                            UPDATE transactions
+                            SET date = ?1, amount = ?2, transaction_type = ?3
+                            WHERE id = ?4
+                              AND (date IS NOT ?1 OR amount IS NOT ?2 OR transaction_type IS NOT ?3)
+                            ",
+                            params![
+                                row.draft.date.format(DATE_FORMAT).to_string(),
+                                row.draft.amount.normalize().to_string(),
+                                row.draft.transaction_type.as_str(),
+                                id
+                            ],
+                        )
+                        .map_err(|err| {
+                            Error::other(format!("Failed to update synced row: {}", err))
+                        })?;
+                }
+                None => {
+                    Self::insert_with_conn(&tx, self.ledger_id, &row.draft, Some(&row.pluggy_id))?;
+                    summary.added += 1;
+                }
+            }
+        }
+
+        tx.commit()
+            .map_err(|err| Error::other(format!("Failed to commit bank sync: {}", err)))?;
         Ok(summary)
     }
 }
@@ -1147,6 +1221,91 @@ mod tests {
         let summary = other.import_merge(&[dup, fresh]).unwrap();
         assert_eq!(summary.added, 2);
         assert_eq!(summary.skipped, 0);
+    }
+
+    fn synced(pluggy_id: &str, date: &str, amount: &str, category: &str) -> SyncedTransaction {
+        SyncedTransaction {
+            pluggy_id: pluggy_id.to_string(),
+            draft: draft(date, "Card purchase", amount, category),
+        }
+    }
+
+    #[test]
+    fn sync_merge_updates_by_pluggy_id_and_keeps_user_edits() {
+        let temp = TempDb::new();
+        let store = temp.store();
+
+        // Two identical purchases on one day are distinct bank rows, not duplicates.
+        let summary = store
+            .sync_merge(&[
+                synced("a", "2026-09-20", "8.00", "Eating out"),
+                synced("b", "2026-09-20", "8.00", "Eating out"),
+            ])
+            .unwrap();
+        assert_eq!(
+            summary,
+            SyncSummary {
+                added: 2,
+                updated: 0
+            }
+        );
+
+        // The user recategorizes one row in the app.
+        let mut rows = store.list().unwrap();
+        rows.sort_by_key(|row| row.id);
+        let mut edited = rows[0].to_draft();
+        edited.category = "Coffee".to_string();
+        store.update(rows[0].id.unwrap(), &edited).unwrap();
+
+        // Re-sync: "a" posted a day later for a different amount, "b" is unchanged.
+        let summary = store
+            .sync_merge(&[
+                synced("a", "2026-09-21", "8.50", "Eating out"),
+                synced("b", "2026-09-20", "8.00", "Eating out"),
+            ])
+            .unwrap();
+        assert_eq!(
+            summary,
+            SyncSummary {
+                added: 0,
+                updated: 1
+            }
+        );
+
+        let mut rows = store.list().unwrap();
+        rows.sort_by_key(|row| row.id);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].date, NaiveDate::from_ymd_opt(2026, 9, 21).unwrap());
+        assert_eq!(rows[0].amount, Decimal::from_str("8.50").unwrap());
+        assert_eq!(rows[0].category, "Coffee");
+    }
+
+    #[test]
+    fn sync_flows_creates_the_account_once_and_skips_known_entries() {
+        let temp = TempDb::new();
+        temp.store().list().unwrap(); // run migrations
+        let store = investments(&temp, DEFAULT_LEDGER_ID);
+        let flow = |id: &str, kind| crate::db::investment_store::SyncedFlow {
+            pluggy_id: id.to_string(),
+            account_name: "Caixinhas / RDB".to_string(),
+            account_kind: "Savings".to_string(),
+            date: NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+            entry_kind: kind,
+            amount: Decimal::from_str("50").unwrap(),
+            note: "Depósito no saldo compartilhado".to_string(),
+        };
+
+        let first = [
+            flow("d1", InvestmentEntryKind::Contribution),
+            flow("w1", InvestmentEntryKind::Withdrawal),
+        ];
+        assert_eq!(store.sync_flows(&first).unwrap(), 2);
+        assert_eq!(store.sync_flows(&first).unwrap(), 0);
+
+        let accounts = store.list_accounts().unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].kind, "Savings");
+        assert_eq!(store.list_entries().unwrap().len(), 2);
     }
 
     #[test]
