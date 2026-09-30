@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A Rust + Ratatui terminal budget tracker (binary `budget-tracker`), forked from `Feromond/budget-tracker-tui` (`upstream` remote; `origin` is the fork). The fork adds automatic bank sync through Pluggy (Open Finance Brasil aggregator) for a Nubank checking account, credit card, investments and bitcoin. Everything under "Bank sync" below is fork-only.
+A Rust + Ratatui terminal budget tracker (binary `budget-tracker`), based on `Feromond/budget-tracker-tui` by Jacob Mish. It began as a fork and has been a standalone repo (`origin` = `humbertogfs55/budget-tracker-tui`, not a GitHub fork) since 2026-09-29. The `upstream` remote still points at the original, for pulling fixes only; never open PRs there. This version adds automatic bank sync through Pluggy (Open Finance Brasil aggregator) for a Nubank checking account, credit card, investments and bitcoin, plus Omarchy theme sync. Everything under "Bank sync" below exists only here. The README credits the original author and the license stays GPL-3.0-only; keep both that way.
 
 ## Commands
 

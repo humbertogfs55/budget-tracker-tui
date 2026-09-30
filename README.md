@@ -5,23 +5,41 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/budget-tracker-tui"><img src="https://img.shields.io/crates/v/budget-tracker-tui" alt="Crates.io version"></a>
-  <a href="https://crates.io/crates/budget-tracker-tui"><img src="https://img.shields.io/crates/d/budget-tracker-tui" alt="Crates.io downloads"></a>
-  <a href="https://formulae.brew.sh/formula/budget-tracker"><img src="https://img.shields.io/homebrew/v/budget-tracker" alt="Homebrew version"></a>
   <a href="https://ratatui.rs/"><img src="https://ratatui.rs/built-with-ratatui/badge.svg" alt="Built With Ratatui"></a>
-</p>
-
-<p align="center">
-  <sub>Previously published as <code>budget_tracker_tui</code>, which reached 221 downloads before the crate was renamed.</sub>
 </p>
 
 A terminal app for tracking your personal budget, built with [Rust](https://www.rust-lang.org) and [Ratatui](https://ratatui.rs).
 
-```bash
-cargo install budget-tracker-tui
-# or
-brew install budget-tracker
-```
+> **Credits.** This is a personal, independently maintained version of
+> [**Budget Tracker TUI**](https://github.com/Feromond/budget-tracker-tui) by
+> [**Jacob Mish** (Feromond)](https://github.com/Feromond), who designed and wrote the app: the
+> transaction views, recurring transactions, categories, summaries and charts, budgets,
+> investments, ledgers, CSV import/export, backups, the SQLite storage and the release tooling.
+> Almost everything described in this README is Jacob's work. This repository started as a fork
+> of the original and was split off in September 2026 because it had drifted too far to contribute back. It
+> keeps the original code, its history and its license (GPL-3.0). If you want the original app, install
+> it from [the original repository](https://github.com/Feromond/budget-tracker-tui),
+> [crates.io](https://crates.io/crates/budget-tracker-tui) or
+> [Homebrew](https://formulae.brew.sh/formula/budget-tracker) instead; those install the original
+> version, not this one.
+
+## What this version adds
+
+Changes made in this repository (September 2026), on top of the original:
+
+- **Automatic bank sync through [Pluggy](https://pluggy.ai)** (Open Finance Brasil), built for a
+  Nubank checking account and credit card. It runs on startup and on `y`. Transactions arrive
+  with Pluggy's categories, moves between checking and investments are recorded as investment
+  contributions and withdrawals, and investment balances become one valuation per day. A re-sync
+  never overwrites the category or description you edited.
+- **Bitcoin tracking** for an investment account named `Cripto`: trades are priced at the
+  Binance BTC/BRL price of the minute they happened, and the account is valued at the live price.
+- **A first-run setup form** for the Pluggy credentials, which writes them to `pluggy.env`
+  (readable only by you).
+- **[Omarchy](https://omarchy.org) theme sync**: the app uses the active Omarchy theme's colors and
+  follows a theme switch live.
+- **Vim-style navigation** (`h`/`j`/`k`/`l`) on list and chart pages, a reworked monthly view,
+  and investment account icons (a [Nerd Font](https://www.nerdfonts.com) is needed for the icons).
 
 <p align="center">
   <img width="2000" height="1226" alt="Budget Tracker tour" src="https://github.com/user-attachments/assets/10387ade-007f-4ba0-b62b-a261a6acf46a" />
@@ -31,6 +49,8 @@ brew install budget-tracker
 
 
 ## Screenshots
+
+Screenshots are from the original project.
 
 <p align="center">
   <img width="1000" height="614" alt="main-transaction-view" src="https://github.com/user-attachments/assets/96b58c49-10ff-4f7e-bdd7-b7c927aa9ba8" />
@@ -79,47 +99,37 @@ brew install budget-tracker
 
 ## Installation
 
-### Cargo (Linux, macOS, Windows)
-
-With Rust installed ([rustup.rs](https://rustup.rs)):
-
-```bash
-cargo install budget-tracker-tui
-```
-
-This puts the `budget-tracker` command on your PATH. If you installed the old `budget_tracker_tui` crate, uninstall it first with `cargo uninstall budget_tracker_tui`.
-
-### Homebrew (macOS & Linux)
-
-With Homebrew installed ([brew.sh](https://brew.sh)):
+This version is not published to crates.io or Homebrew yet. Build it from source with Rust
+installed ([rustup.rs](https://rustup.rs)):
 
 ```bash
-brew install budget-tracker
-```
-
-### Prebuilt binaries (no Rust required)
-
-Grab the archive for your platform from the [Releases page](https://github.com/Feromond/budget-tracker-tui/releases), unpack it, and move `budget-tracker` onto your PATH. Linux has glibc and static musl builds for both x86_64 and arm64; the musl ones run on any distribution. Every release ships a `SHA256SUMS` file if you want to check the download:
-
-```bash
-sha256sum -c SHA256SUMS --ignore-missing
-```
-
-Windows also has an installer on that page. I don't have a Windows developer licence, so it shows as an unknown publisher.
-
-### From source
-
-```bash
-git clone https://github.com/Feromond/budget-tracker-tui
+git clone https://github.com/humbertogfs55/budget-tracker-tui
 cd budget-tracker-tui
 cargo install --path .
 ```
+
+This puts the `budget-tracker` command on your PATH.
 
 ## Usage
 
 Launch with `budget-tracker`. The help bar at the bottom shows the keys for the current view, and `Ctrl+H` opens the full keybindings menu. Settings (`o`) is where you configure the database path, categories, CSV import/export, and display preferences. Budgets are set in the budget view (`b`).
 
-For a more detailed walkthrough of every view and setting, see the [User Guide](docs/user-guide.md).
+For a more detailed walkthrough of every view and setting, see the [User Guide](docs/user-guide.md) (written for the original app, so it doesn't cover the additions above).
+
+### Bank sync (Pluggy)
+
+You need a Pluggy application (Client ID and Client Secret, from
+[dashboard.pluggy.ai](https://dashboard.pluggy.ai)) and one Item ID per bank connection. On the
+first launch without credentials a form asks for them and saves them to `pluggy.env` next to
+`config.json`. Press `Esc` to skip it, and `y` later to open it again. The environment variables
+`PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` and `PLUGGY_ITEM_IDS` (comma-separated) take precedence
+over the file. Without credentials the app works as before, just without sync.
+
+### Omarchy themes
+
+On [Omarchy](https://omarchy.org) the colors come from the active theme
+(`~/.local/state/omarchy/current/theme/colors.toml`) and update within a second of
+`omarchy-theme-set`. Elsewhere the app keeps its original terminal colors.
 
 ## Data & configuration
 
@@ -131,6 +141,8 @@ Transactions, categories, and investments live in a local SQLite database (`budg
 | macOS   | `~/Library/Application Support/BudgetTracker/` | same                       |
 | Windows | `%APPDATA%\BudgetTracker\`                     | same                       |
 
+Bank sync credentials, when set up, are in `pluggy.env` in the config folder.
+
 The database path is configurable in settings; point it at a cloud-synced folder (iCloud, Dropbox, etc.) to share your budget across devices. Changes are saved to the database immediately.
 
 Older versions stored transactions in a `transactions.csv` file. On first launch, it is imported into the database automatically and renamed to `transactions.csv.migrated-backup`.
@@ -139,6 +151,10 @@ Older versions stored transactions in a `transactions.csv` file. On first launch
 
 Import/export uses the columns `date, description, amount, transaction_type, category, subcategory`, with flexible date parsing. Import skips exact duplicates, so re-importing the same file is safe. Full details are in the [User Guide](docs/user-guide.md#csv-format).
 
-## License
+## License and credits
 
-Licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+Budget Tracker TUI was created by [Jacob Mish](https://github.com/Feromond) and is copyright its
+original authors; the changes in this repository are copyright their authors. Both are licensed
+under the GNU General Public License v3.0 only, the same license as the original. See
+[LICENSE](LICENSE) for details. The commit history, including every commit from the original
+project, shows who wrote what.
