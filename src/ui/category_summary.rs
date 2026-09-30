@@ -149,7 +149,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         months = app.sorted_category_months_for_year(year);
     }
 
-    let (total_income, total_expense) = crate::app::util::calculate_totals(app, current_year);
+    let (total_income, total_expense) = crate::app::util::calculate_totals(app, current_year, None);
 
     let selected_row = app.category_summary_table_state.selected();
     let today = chrono::Local::now().date_naive();

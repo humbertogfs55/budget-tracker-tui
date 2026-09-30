@@ -235,11 +235,17 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
         _ => None, // No year filter for other modes - show all transactions as before
     };
 
+    // The single-month summary view totals only the month being shown
+    let month_filter = match render_mode {
+        AppMode::Summary if !app.summary_multi_month_mode => app.selected_summary_month,
+        _ => None,
+    };
+
     if let Some(msg) = &app.status_message {
         status::render_status_bar(f, msg, status_area);
     }
 
-    summary::render_summary_bar(f, app, summary_area, year_filter);
+    summary::render_summary_bar(f, app, summary_area, year_filter, month_filter);
 
     if !app.hide_help_bar {
         help::render_help_bar(f, app, help_area);

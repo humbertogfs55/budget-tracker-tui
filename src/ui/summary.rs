@@ -11,6 +11,30 @@ use ratatui::widgets::{
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 
+/// Colors assigned to a year's months in order, shared by the chart and the totals bar.
+const MONTH_PALETTE: [Color; 12] = [
+    Color::LightRed,
+    Color::LightGreen,
+    Color::LightBlue,
+    Color::LightYellow,
+    Color::LightMagenta,
+    Color::LightCyan,
+    Color::Red,
+    Color::Green,
+    Color::Blue,
+    Color::Yellow,
+    Color::Magenta,
+    Color::Cyan,
+];
+
+/// Color of `month` given the sorted months that have data in its year.
+fn month_color(months: &[u32], month: u32) -> Color {
+    months
+        .iter()
+        .position(|&m| m == month)
+        .map_or(Color::White, |idx| MONTH_PALETTE[idx % MONTH_PALETTE.len()])
+}
+
 pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     let summary_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -36,20 +60,6 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     if let Some(year) = current_year {
         months = app.sorted_months_for_year(year);
     }
-    let color_palette = [
-        Color::LightRed,
-        Color::LightGreen,
-        Color::LightBlue,
-        Color::LightYellow,
-        Color::LightMagenta,
-        Color::LightCyan,
-        Color::Red,
-        Color::Green,
-        Color::Blue,
-        Color::Yellow,
-        Color::Magenta,
-        Color::Cyan,
-    ];
     let mut all_line_data: Vec<Vec<(f64, f64)>> = vec![];
     let mut legend_labels = vec![];
     let mut max_expense = Decimal::ZERO;
@@ -104,12 +114,12 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                     .name(month_to_short_str(month))
                     .marker(ratatui::symbols::Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(color_palette[i % color_palette.len()]))
+                    .style(Style::default().fg(MONTH_PALETTE[i % MONTH_PALETTE.len()]))
                     .data(line_data),
             );
             legend_labels.push(Span::styled(
                 month_to_short_str(month),
-                Style::default().fg(color_palette[i % color_palette.len()]),
+                Style::default().fg(MONTH_PALETTE[i % MONTH_PALETTE.len()]),
             ));
         }
     } else {
@@ -159,9 +169,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             // Determine color for this month (same as in title)
             let month_color = app
                 .selected_summary_month
-                .and_then(|m| months.iter().position(|&x| x == m))
-                .map(|idx| color_palette[idx % color_palette.len()])
-                .unwrap_or(Color::White);
+                .map_or(Color::White, |m| month_color(&months, m));
             datasets.push(
                 Dataset::default()
                     .name(month_to_short_str(month))
@@ -242,9 +250,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     } else {
         let month_color = app
             .selected_summary_month
-            .and_then(|m| months.iter().position(|&x| x == m))
-            .map(|idx| color_palette[idx % color_palette.len()])
-            .unwrap_or(Color::White);
+            .map_or(Color::White, |m| month_color(&months, m));
         let month_str = app
             .selected_summary_month
             .map(month_to_short_str)
@@ -474,8 +480,15 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     f.render_widget(bar_chart, bar_chart_area);
 }
 
-pub fn render_summary_bar(f: &mut Frame, app: &App, area: Rect, year_filter: Option<i32>) {
-    let (total_income, total_expense) = crate::app::util::calculate_totals(app, year_filter);
+pub fn render_summary_bar(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    year_filter: Option<i32>,
+    month_filter: Option<u32>,
+) {
+    let (total_income, total_expense) =
+        crate::app::util::calculate_totals(app, year_filter, month_filter);
     let net_balance = total_income - total_expense;
 
     let income_str = if app.show_hours {
@@ -532,17 +545,30 @@ pub fn render_summary_bar(f: &mut Frame, app: &App, area: Rect, year_filter: Opt
     .alignment(Alignment::Center);
 
     let is_filtered = app.filtered_indices.len() != app.transactions.len();
-    let title = match (year_filter, is_filtered) {
-        (Some(year), true) => format!("Grand Total - {} (Filtered)", year),
-        (Some(year), false) => format!("Grand Total - {}", year),
-        (None, true) => "Grand Total (Filtered)".to_string(),
-        (None, false) => "Grand Total (All Transactions)".to_string(),
+    let bold = Style::default().add_modifier(Modifier::BOLD);
+    let mut title_spans = match (year_filter, month_filter) {
+        (Some(year), Some(month)) => {
+            let color = month_color(&app.sorted_months_for_year(year), month);
+            vec![
+                Span::styled("Total - ", bold),
+                Span::styled(month_to_short_str(month), bold.fg(color)),
+                Span::styled(" ", bold),
+                Span::styled(year.to_string(), bold.fg(Color::Magenta)),
+            ]
+        }
+        (Some(year), None) => vec![Span::styled(format!("Grand Total - {}", year), bold)],
+        (None, _) if is_filtered => vec![Span::styled("Grand Total", bold)],
+        (None, _) => vec![Span::styled("Grand Total (All Transactions)", bold)],
     };
+    if is_filtered {
+        title_spans.push(Span::styled(" (Filtered)", bold));
+    }
 
-    let summary_paragraph =
-        Paragraph::new(summary_line).block(Block::default().borders(Borders::ALL).title(
-            Span::styled(title, Style::default().add_modifier(Modifier::BOLD)),
-        ));
+    let summary_paragraph = Paragraph::new(summary_line).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(Line::from(title_spans)),
+    );
 
     f.render_widget(summary_paragraph, area);
 }

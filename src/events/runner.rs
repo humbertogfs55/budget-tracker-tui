@@ -51,7 +51,7 @@ where
             needs_redraw = true;
 
             let event = match event::read()? {
-                Event::Key(key) => Event::Key(normalize_key(key)),
+                Event::Key(key) => Event::Key(vim_to_arrow(app.mode, normalize_key(key))),
                 other => other,
             };
             match event {
@@ -114,6 +114,46 @@ fn normalize_key(mut key: KeyEvent) -> KeyEvent {
     {
         key.modifiers = KeyModifiers::NONE;
     }
+    key
+}
+
+// Vim-style aliases for the arrow keys, only on pages where letters are not typed
+// as text or used for type-to-select: h/j/k/l are arrows, Shift+H/L are
+// Shift+Left/Right and Ctrl+J/K are Ctrl+Down/Up.
+fn vim_to_arrow(mode: AppMode, mut key: KeyEvent) -> KeyEvent {
+    let navigation_page = matches!(
+        mode,
+        AppMode::Normal
+            | AppMode::Summary
+            | AppMode::CategorySummary
+            | AppMode::Budget
+            | AppMode::CategoryCatalog
+            | AppMode::LedgerManager
+            | AppMode::BackupManager
+            | AppMode::Investments
+            | AppMode::InvestmentDetail
+    );
+    if !navigation_page {
+        return key;
+    }
+    let (code, modifiers) = match (key.code, key.modifiers) {
+        (KeyCode::Char('h'), KeyModifiers::NONE) => (KeyCode::Left, KeyModifiers::NONE),
+        (KeyCode::Char('j'), KeyModifiers::NONE) => (KeyCode::Down, KeyModifiers::NONE),
+        (KeyCode::Char('k'), KeyModifiers::NONE) => (KeyCode::Up, KeyModifiers::NONE),
+        (KeyCode::Char('l'), KeyModifiers::NONE) => (KeyCode::Right, KeyModifiers::NONE),
+        // Some terminals report Shift+H as a bare 'H'
+        (KeyCode::Char('H'), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+            (KeyCode::Left, KeyModifiers::SHIFT)
+        }
+        (KeyCode::Char('L'), KeyModifiers::NONE | KeyModifiers::SHIFT) => {
+            (KeyCode::Right, KeyModifiers::SHIFT)
+        }
+        (KeyCode::Char('j'), KeyModifiers::CONTROL) => (KeyCode::Down, KeyModifiers::CONTROL),
+        (KeyCode::Char('k'), KeyModifiers::CONTROL) => (KeyCode::Up, KeyModifiers::CONTROL),
+        _ => return key,
+    };
+    key.code = code;
+    key.modifiers = modifiers;
     key
 }
 
@@ -208,5 +248,82 @@ fn update(app: &mut App, key_event: KeyEvent) {
         | AppMode::ConfirmInvestmentDelete => {
             investments_mode::handle_investments_mode(app, key_event)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
+        KeyEvent::new(code, modifiers)
+    }
+
+    #[test]
+    fn vim_keys_become_arrows_only_on_navigation_pages() {
+        let cases = [
+            (
+                KeyCode::Char('h'),
+                KeyModifiers::NONE,
+                KeyCode::Left,
+                KeyModifiers::NONE,
+            ),
+            (
+                KeyCode::Char('j'),
+                KeyModifiers::NONE,
+                KeyCode::Down,
+                KeyModifiers::NONE,
+            ),
+            (
+                KeyCode::Char('k'),
+                KeyModifiers::NONE,
+                KeyCode::Up,
+                KeyModifiers::NONE,
+            ),
+            (
+                KeyCode::Char('l'),
+                KeyModifiers::NONE,
+                KeyCode::Right,
+                KeyModifiers::NONE,
+            ),
+            (
+                KeyCode::Char('H'),
+                KeyModifiers::SHIFT,
+                KeyCode::Left,
+                KeyModifiers::SHIFT,
+            ),
+            (
+                KeyCode::Char('L'),
+                KeyModifiers::NONE,
+                KeyCode::Right,
+                KeyModifiers::SHIFT,
+            ),
+            (
+                KeyCode::Char('j'),
+                KeyModifiers::CONTROL,
+                KeyCode::Down,
+                KeyModifiers::CONTROL,
+            ),
+            (
+                KeyCode::Char('k'),
+                KeyModifiers::CONTROL,
+                KeyCode::Up,
+                KeyModifiers::CONTROL,
+            ),
+        ];
+        for (code, modifiers, want_code, want_modifiers) in cases {
+            let got = vim_to_arrow(AppMode::Budget, key(code, modifiers));
+            assert_eq!((got.code, got.modifiers), (want_code, want_modifiers));
+        }
+
+        // Text entry keeps the letters
+        let typed = vim_to_arrow(AppMode::Adding, key(KeyCode::Char('j'), KeyModifiers::NONE));
+        assert_eq!(typed.code, KeyCode::Char('j'));
+        // Ctrl+H stays the help toggle
+        let help = vim_to_arrow(
+            AppMode::Normal,
+            key(KeyCode::Char('h'), KeyModifiers::CONTROL),
+        );
+        assert_eq!(help.code, KeyCode::Char('h'));
     }
 }

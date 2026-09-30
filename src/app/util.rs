@@ -69,16 +69,15 @@ impl TypeToSelect {
 pub fn calculate_totals(
     app: &crate::app::state::App,
     year_filter: Option<i32>,
+    month_filter: Option<u32>,
 ) -> (Decimal, Decimal) {
     app.filtered_indices
         .iter()
         .filter_map(|&idx| app.transactions.get(idx))
         .filter(|tx| {
-            // Apply year filter if specified, otherwise include all transactions
-            match year_filter {
-                Some(year) => tx.date.year() == year,
-                None => true,
-            }
+            // Apply year/month filters if specified, otherwise include all transactions
+            year_filter.is_none_or(|year| tx.date.year() == year)
+                && month_filter.is_none_or(|month| tx.date.month() == month)
         })
         .fold((Decimal::ZERO, Decimal::ZERO), |(inc, exp), tx| {
             match tx.transaction_type {

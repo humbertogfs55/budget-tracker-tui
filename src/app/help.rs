@@ -30,6 +30,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
             KeyBindingInfo::new("↑/↓", "Navigate transactions", "Navigation", None),
             KeyBindingInfo::new("PgUp/PgDn", "Scroll page up/down", "Navigation", None),
             KeyBindingInfo::new("Ctrl+Up/Down", "Jump to First/Last", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Same as ↑/↓", "Vim", None),
+            KeyBindingInfo::new("Ctrl+K/J", "Same as Ctrl+Up/Down", "Vim", None),
             KeyBindingInfo::new(
                 "a",
                 "Add new transaction",
@@ -324,6 +326,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         AppMode::Summary => vec![
             KeyBindingInfo::new("↑/↓", "Change Month", "Navigation", None),
             KeyBindingInfo::new("←/→ / [/] / PgUp/PgDn", "Change Year", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Change Month", "Vim", None),
+            KeyBindingInfo::new("h/l", "Change Year", "Vim", None),
             KeyBindingInfo::new(
                 "m",
                 "Toggle Multi-Month View",
@@ -342,6 +346,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         AppMode::CategorySummary => vec![
             KeyBindingInfo::new("↑/↓", "Select Category/Subcategory", "Navigation", None),
             KeyBindingInfo::new("←/→ / [/]", "Change Year", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Select Category/Subcategory", "Vim", None),
+            KeyBindingInfo::new("h/l", "Change Year", "Vim", None),
             KeyBindingInfo::new("PgUp/PgDn", "Jump Selected Month", "Navigation", None),
             KeyBindingInfo::new(
                 "1-6 / F1-F6",
@@ -374,6 +380,9 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
             KeyBindingInfo::new("↑/↓", "Select Budget Row", "Navigation", None),
             KeyBindingInfo::new("←/→", "Change Month", "Navigation", None),
             KeyBindingInfo::new("Shift+←/→", "Change Year", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Select Budget Row", "Vim", None),
+            KeyBindingInfo::new("h/l", "Change Month", "Vim", None),
+            KeyBindingInfo::new("Shift+H/L", "Change Year", "Vim", None),
             KeyBindingInfo::new(
                 "e",
                 "Edit Category Budget",
@@ -526,6 +535,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
             KeyBindingInfo::new("↑/↓", "Navigate categories", "Navigation", None),
             KeyBindingInfo::new("PgUp/PgDn", "Scroll page up/down", "Navigation", None),
             KeyBindingInfo::new("Ctrl+Up/Down", "Jump to First/Last", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Same as ↑/↓", "Vim", None),
+            KeyBindingInfo::new("Ctrl+K/J", "Same as Ctrl+Up/Down", "Vim", None),
             KeyBindingInfo::new(
                 "f",
                 "Filter categories",
@@ -613,6 +624,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         ],
         AppMode::Investments => vec![
             KeyBindingInfo::new("↑/↓", "Navigate accounts", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Navigate accounts", "Vim", None),
+            KeyBindingInfo::new("h/l", "Change time range", "Vim", None),
             KeyBindingInfo::new(
                 "←/→",
                 "Change time range",
@@ -665,6 +678,8 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         AppMode::InvestmentDetail => vec![
             KeyBindingInfo::new("↑/↓", "Navigate entries", "Navigation", None),
             KeyBindingInfo::new("←/→", "Change time range", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Navigate entries", "Vim", None),
+            KeyBindingInfo::new("h/l", "Change time range", "Vim", None),
             KeyBindingInfo::new(
                 "v",
                 "Record a valuation",
@@ -741,6 +756,7 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         ],
         AppMode::LedgerManager => vec![
             KeyBindingInfo::new("↑/↓", "Navigate ledgers", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Navigate ledgers", "Vim", None),
             KeyBindingInfo::new(
                 "Enter",
                 "Switch to selected ledger",
@@ -785,6 +801,7 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
         ],
         AppMode::BackupManager => vec![
             KeyBindingInfo::new("↑/↓", "Navigate backups", "Navigation", None),
+            KeyBindingInfo::new("k/j", "Navigate backups", "Vim", None),
             KeyBindingInfo::new(
                 "Enter",
                 "Restore the selected backup",
