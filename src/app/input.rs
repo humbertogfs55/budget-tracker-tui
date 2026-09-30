@@ -63,6 +63,14 @@ impl App {
                     field.kind(),
                 ))
             }
+            AppMode::BankSyncSetup => {
+                let field = self.bank_sync_setup_fields.focused();
+                Some((
+                    &mut self.bank_sync_setup_fields[field],
+                    &mut self.bank_sync_setup_cursor,
+                    field.kind(),
+                ))
+            }
             AppMode::BudgetCategoryEditor => Some((
                 &mut self.budget_edit_input,
                 &mut self.budget_edit_cursor,
@@ -146,7 +154,7 @@ impl App {
                         *cursor += c.len_utf8();
                     }
                 }
-                FieldKind::Text => {
+                FieldKind::Text | FieldKind::Secret => {
                     if *cursor >= content.len() {
                         content.push(c);
                     } else {
@@ -442,6 +450,15 @@ impl App {
                 self.io_path_input.insert_str(at, text);
                 self.io_path_input = crate::validation::strip_path_quotes(&self.io_path_input);
                 self.io_path_cursor = self.io_path_input.len();
+            }
+            AppMode::BankSyncSetup => {
+                // A copied id often drags a trailing newline along.
+                let text: String = text.chars().filter(|c| !c.is_control()).collect();
+                if let Some((content, cursor, _)) = self.get_active_input_mut() {
+                    let at = (*cursor).min(content.len());
+                    content.insert_str(at, &text);
+                    *cursor = at + text.len();
+                }
             }
             _ => {}
         }

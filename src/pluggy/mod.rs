@@ -35,15 +35,7 @@ pub fn load_credentials() -> Result<Option<Credentials>, String> {
     if let Some(path) = env_file_path().filter(|path| path.exists()) {
         let text = std::fs::read_to_string(&path)
             .map_err(|err| format!("Could not read {}: {}", path.display(), err))?;
-        for line in text.lines().map(str::trim) {
-            if line.starts_with('#') {
-                continue;
-            }
-            if let Some((key, value)) = line.split_once('=') {
-                let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
-                values.insert(key.trim().to_string(), value.to_string());
-            }
-        }
+        values = parse_env_file(&text);
     }
     let mut get = |key: &str| {
         std::env::var(key)
@@ -71,6 +63,103 @@ pub fn load_credentials() -> Result<Option<Credentials>, String> {
         client_secret,
         item_ids,
     }))
+}
+
+/// `KEY=value` lines; `#` comments and quotes around a value are ignored.
+fn parse_env_file(text: &str) -> HashMap<String, String> {
+    let mut values = HashMap::new();
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            let value = value.trim().trim_matches(|c| c == '"' || c == '\'');
+            values.insert(key.trim().to_string(), value.to_string());
+        }
+    }
+    values
+}
+
+/// A value as it will sit on its own `KEY=value` line. Anything the parser would trim or
+/// misread is refused rather than written into a file that then fails to load.
+fn env_value<'a>(label: &str, value: &'a str) -> Result<&'a str, String> {
+    let value = value.trim();
+    if value.is_empty() || PLACEHOLDERS.contains(&value) {
+        return Err(format!("{} is required.", label));
+    }
+    if value
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control() || c == '"' || c == '\'')
+    {
+        return Err(format!("{} can't contain spaces or quotes.", label));
+    }
+    Ok(value)
+}
+
+/// The contents of `pluggy.env` for these credentials. Item ids may be separated by commas or
+/// spaces; they are written comma-separated, without duplicates.
+pub fn credentials_file(
+    client_id: &str,
+    client_secret: &str,
+    item_ids: &str,
+) -> Result<String, String> {
+    let client_id = env_value("Client ID", client_id)?;
+    let client_secret = env_value("Client Secret", client_secret)?;
+    let mut items: Vec<&str> = Vec::new();
+    for id in item_ids.split(|c: char| c == ',' || c.is_whitespace()) {
+        if id.is_empty() {
+            continue;
+        }
+        let id = env_value("Item ID", id)?;
+        if !items.contains(&id) {
+            items.push(id);
+        }
+    }
+    if items.is_empty() {
+        return Err("At least one Item ID is required.".to_string());
+    }
+    Ok(format!(
+        "PLUGGY_CLIENT_ID={}\nPLUGGY_CLIENT_SECRET={}\nPLUGGY_ITEM_IDS={}\n",
+        client_id,
+        client_secret,
+        items.join(",")
+    ))
+}
+
+/// Writes `pluggy.env` readable only by the user, replacing any existing one in one step so a
+/// failed write never leaves half a file behind.
+pub fn save_credentials(
+    client_id: &str,
+    client_secret: &str,
+    item_ids: &str,
+) -> Result<PathBuf, String> {
+    let contents = credentials_file(client_id, client_secret, item_ids)?;
+    let path = env_file_path().ok_or("Could not find the config directory.")?;
+    let fail = |err: std::io::Error| format!("Could not write {}: {}", path.display(), err);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(fail)?;
+    }
+    let tmp = path.with_extension("env.tmp");
+    // The mode only applies on creation, so a leftover temp file must not be reused.
+    let _ = std::fs::remove_file(&tmp);
+    let written = write_private(&tmp, &contents).and_then(|_| std::fs::rename(&tmp, &path));
+    if let Err(err) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(fail(err));
+    }
+    Ok(path)
+}
+
+fn write_private(path: &std::path::Path, contents: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(contents.as_bytes())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -266,4 +355,31 @@ fn read_json<T: DeserializeOwned>(
         .body_mut()
         .read_json::<T>()
         .map_err(|err| format!("Pluggy {}: unexpected response: {}", label, err))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn credentials_file_round_trips_through_the_parser() {
+        let text = credentials_file(" id-1 ", "secret-1", "item-a, item-b item-a,").unwrap();
+        assert_eq!(
+            text,
+            "PLUGGY_CLIENT_ID=id-1\nPLUGGY_CLIENT_SECRET=secret-1\nPLUGGY_ITEM_IDS=item-a,item-b\n"
+        );
+        let values = parse_env_file(&text);
+        assert_eq!(values["PLUGGY_CLIENT_ID"], "id-1");
+        assert_eq!(values["PLUGGY_CLIENT_SECRET"], "secret-1");
+        assert_eq!(values["PLUGGY_ITEM_IDS"], "item-a,item-b");
+    }
+
+    #[test]
+    fn credentials_file_refuses_values_the_parser_would_mangle() {
+        assert!(credentials_file("", "secret", "item").is_err());
+        assert!(credentials_file("id", "clientsecret-here", "item").is_err());
+        assert!(credentials_file("id", "sec ret", "item").is_err());
+        assert!(credentials_file("id", "secret\"", "item").is_err());
+        assert!(credentials_file("id", "secret", " , ").is_err());
+    }
 }

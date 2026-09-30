@@ -28,6 +28,9 @@ pub fn render_field_form<K: FieldKey, const N: usize>(
                     format!(" < {} > ", text),
                     Style::default().fg(theme::current().text).bold(),
                 ),
+                None if field.kind() == FieldKind::Secret => {
+                    Span::raw("•".repeat(text.chars().count()))
+                }
                 None => Span::raw(text.as_str()),
             };
 

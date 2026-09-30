@@ -113,7 +113,7 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
                 "Sync bank (Pluggy)",
                 "Actions",
                 Some(
-                    "Pull new transactions from your bank through Pluggy. Also runs on startup. Needs PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET and PLUGGY_ITEM_IDS in the environment or in pluggy.env next to config.json. Crypto is tracked once you add an investment account named Cripto with a Quantity Held: later trades are priced at the minute they happened and the account is valued at the live BTC price.",
+                    "Pull new transactions from your bank through Pluggy. Also runs on startup. Needs PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET and PLUGGY_ITEM_IDS in the environment or in pluggy.env next to config.json; without them, y opens a form that writes that file. Crypto is tracked once you add an investment account named Cripto with a Quantity Held: later trades are priced at the minute they happened and the account is valued at the live BTC price.",
                 ),
             ),
             KeyBindingInfo::new(
@@ -789,6 +789,29 @@ pub fn get_help_for_mode(mode: AppMode) -> Vec<KeyBindingInfo> {
                 ),
             ),
             KeyBindingInfo::new("q/Esc", "Back to Settings", "System", None),
+        ],
+        AppMode::BankSyncSetup => vec![
+            KeyBindingInfo::new(
+                "Tab/Shift+Tab/↑↓",
+                "Move between fields",
+                "Navigation",
+                None,
+            ),
+            KeyBindingInfo::new("←/→", "Move cursor", "Navigation", None),
+            KeyBindingInfo::new(
+                "Enter",
+                "Save credentials and sync",
+                "Actions",
+                Some(
+                    "Writes pluggy.env next to config.json, readable only by you, then starts a sync. The Client ID and Secret come from your application at dashboard.pluggy.ai; each connected bank has its own Item ID.",
+                ),
+            ),
+            KeyBindingInfo::new(
+                "Esc",
+                "Skip",
+                "System",
+                Some("The form is not offered on startup again. Press y later to open it."),
+            ),
         ],
         AppMode::LedgerEditor => vec![
             KeyBindingInfo::new("←/→", "Move cursor", "Navigation", None),

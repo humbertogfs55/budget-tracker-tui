@@ -19,6 +19,8 @@ pub(crate) struct AppSettings {
     pub(crate) recurring_forecast_months: Option<u32>,
     pub(crate) backups_enabled: Option<bool>,
     pub(crate) backup_keep: Option<u32>,
+    /// Set once the first-run bank sync prompt is dismissed, so it isn't offered again.
+    pub(crate) bank_sync_setup_skipped: Option<bool>,
     /// Identifies this install in backup filenames.
     pub(crate) instance_id: Option<String>,
 }

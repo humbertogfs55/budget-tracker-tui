@@ -1,4 +1,6 @@
-use super::state::App;
+use super::state::{App, AppMode};
+use crate::app::fields::BankSyncSetupField;
+use crate::config::{load_settings, save_settings};
 use crate::db::category_store::CategoryStore;
 use crate::db::database::SqliteDatabase;
 use crate::db::investment_store::{
@@ -77,6 +79,66 @@ fn collect(
 }
 
 impl App {
+    /// No credentials file yet and the setup prompt was never dismissed.
+    fn first_run_without_bank_sync() -> bool {
+        let skipped = load_settings()
+            .ok()
+            .and_then(|settings| settings.bank_sync_setup_skipped)
+            .unwrap_or(false);
+        !skipped && pluggy::env_file_path().is_some_and(|path| !path.exists())
+    }
+
+    pub(crate) fn open_bank_sync_setup(&mut self) {
+        self.bank_sync_setup_fields.reset();
+        self.bank_sync_setup_cursor = 0;
+        self.mode = AppMode::BankSyncSetup;
+    }
+
+    /// Remembers the dismissal so the prompt stays away on later launches; `y` still opens it.
+    pub(crate) fn cancel_bank_sync_setup(&mut self) {
+        self.bank_sync_setup_fields.reset();
+        self.bank_sync_setup_cursor = 0;
+        self.mode = AppMode::Normal;
+        if let Ok(mut settings) = load_settings()
+            && settings.bank_sync_setup_skipped != Some(true)
+        {
+            settings.bank_sync_setup_skipped = Some(true);
+            let _ = save_settings(&settings);
+        }
+        self.set_status_message(
+            "Bank sync not set up. Press y to set it up later.",
+            Some(Duration::seconds(5)),
+        );
+    }
+
+    pub(crate) fn next_bank_sync_setup_field(&mut self) {
+        self.bank_sync_setup_fields.focus_next();
+        self.bank_sync_setup_cursor = self.bank_sync_setup_fields.focused_value().len();
+    }
+
+    pub(crate) fn previous_bank_sync_setup_field(&mut self) {
+        self.bank_sync_setup_fields.focus_previous();
+        self.bank_sync_setup_cursor = self.bank_sync_setup_fields.focused_value().len();
+    }
+
+    /// Writes `pluggy.env` and starts the first sync. On a bad value the form stays open.
+    pub(crate) fn save_bank_sync_setup(&mut self) {
+        let fields = &self.bank_sync_setup_fields;
+        match pluggy::save_credentials(
+            &fields[BankSyncSetupField::ClientId],
+            &fields[BankSyncSetupField::ClientSecret],
+            &fields[BankSyncSetupField::ItemIds],
+        ) {
+            Ok(_) => {
+                self.bank_sync_setup_fields.reset();
+                self.bank_sync_setup_cursor = 0;
+                self.mode = AppMode::Normal;
+                self.start_bank_sync(true);
+            }
+            Err(err) => self.set_status_message(err, None),
+        }
+    }
+
     /// Start fetching from Pluggy in the background. Silent when sync isn't configured unless
     /// the user asked for it (`manual`).
     pub(crate) fn start_bank_sync(&mut self, manual: bool) {
@@ -89,17 +151,8 @@ impl App {
         let credentials = match pluggy::load_credentials() {
             Ok(Some(credentials)) => credentials,
             Ok(None) => {
-                if manual {
-                    let path = pluggy::env_file_path()
-                        .map(|path| path.display().to_string())
-                        .unwrap_or_else(|| "pluggy.env".to_string());
-                    self.set_status_message(
-                        format!(
-                            "Bank sync is not set up: add Pluggy credentials to {}",
-                            path
-                        ),
-                        None,
-                    );
+                if manual || Self::first_run_without_bank_sync() {
+                    self.open_bank_sync_setup();
                 }
                 return;
             }

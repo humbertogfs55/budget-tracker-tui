@@ -1,6 +1,6 @@
 use super::state::{App, AppMode};
 use crate::app::settings_types::{SettingKey, SettingType, SettingsState};
-use crate::config::{AppSettings, save_settings};
+use crate::config::{AppSettings, load_settings, save_settings};
 use crate::csv_io::load_seed_categories;
 use chrono::Duration;
 use std::path::PathBuf;
@@ -331,6 +331,10 @@ impl App {
             backups_enabled: backups_enabled_val,
             backup_keep: Some(backup_keep),
             instance_id: Some(self.backup_instance_id.clone()),
+            // Not editable here, so keep whatever the file already says.
+            bank_sync_setup_skipped: load_settings()
+                .ok()
+                .and_then(|stored| stored.bank_sync_setup_skipped),
         };
         if let Err(e) = save_settings(&settings) {
             self.set_status_message(format!("Error saving config file: {}", e), None);

@@ -7,9 +7,9 @@ use std::result::Result as StdResult;
 use std::time::Duration;
 
 use super::{
-    add_edit_mode, backup_mode, budget_mode, category_manager_mode, filter_mode, fuzzy_search_mode,
-    help_mode, investments_mode, ledger_manager_mode, normal_mode, recurring_mode, selection_mode,
-    settings_mode, summary_mode, transaction_io_mode,
+    add_edit_mode, backup_mode, bank_sync_mode, budget_mode, category_manager_mode, filter_mode,
+    fuzzy_search_mode, help_mode, investments_mode, ledger_manager_mode, normal_mode,
+    recurring_mode, selection_mode, settings_mode, summary_mode, transaction_io_mode,
 };
 
 pub fn run_app<B: Backend>(
@@ -71,7 +71,7 @@ where
                                 || ((app.mode == AppMode::ImportTransactions || app.mode == AppMode::ExportTransactions) && key.modifiers == KeyModifiers::SHIFT && matches!(key.code, KeyCode::Char(_)))
                                 || ((app.mode == AppMode::ImportTransactions || app.mode == AppMode::ExportTransactions) && key.modifiers == KeyModifiers::CONTROL && matches!(key.code, KeyCode::Char('d') | KeyCode::Char('u') | KeyCode::Char('v')))
                                 // Allow Shift+Char in Adding, Editing and FuzzyFinding modes
-                                || ((app.mode == AppMode::Adding || app.mode == AppMode::Editing || app.mode == AppMode::FuzzyFinding || app.mode == AppMode::CategoryEditor || app.mode == AppMode::CategoryCatalogFilter || app.mode == AppMode::LedgerEditor) && key.modifiers == KeyModifiers::SHIFT && matches!(key.code, KeyCode::Char(_)))
+                                || ((app.mode == AppMode::Adding || app.mode == AppMode::Editing || app.mode == AppMode::FuzzyFinding || app.mode == AppMode::CategoryEditor || app.mode == AppMode::CategoryCatalogFilter || app.mode == AppMode::LedgerEditor || app.mode == AppMode::BankSyncSetup) && key.modifiers == KeyModifiers::SHIFT && matches!(key.code, KeyCode::Char(_)))
                                 // Allow Shift+Arrow in date-like navigation modes
                                 || ((app.mode == AppMode::Adding || app.mode == AppMode::Editing || app.mode == AppMode::AdvancedFiltering || app.mode == AppMode::RecurringSettings || app.mode == AppMode::Budget || app.mode == AppMode::InvestmentAccountEditor || app.mode == AppMode::InvestmentEntryEditor)
                                     && key.modifiers == KeyModifiers::SHIFT
@@ -245,6 +245,7 @@ fn update(app: &mut App, key_event: KeyEvent) {
         AppMode::BackupManager | AppMode::ConfirmBackupRestore | AppMode::ConfirmBackupDelete => {
             backup_mode::handle_backup_mode(app, key_event)
         }
+        AppMode::BankSyncSetup => bank_sync_mode::handle_bank_sync_setup_mode(app, key_event),
         AppMode::Investments
         | AppMode::InvestmentDetail
         | AppMode::InvestmentAccountEditor

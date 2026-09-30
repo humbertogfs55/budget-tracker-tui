@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod bank_sync;
 pub mod budget;
 pub mod category_manager;
 pub mod category_summary;
@@ -110,6 +111,10 @@ pub(crate) fn ui(f: &mut Frame, app: &mut App) {
     match render_mode {
         AppMode::Normal | AppMode::Filtering => {
             transaction_table::render_transaction_table(f, app, main_area);
+        }
+        AppMode::BankSyncSetup => {
+            transaction_table::render_transaction_table(f, app, main_area);
+            bank_sync::render_bank_sync_setup(f, app, main_area);
         }
         AppMode::AdvancedFiltering => {
             filter::render_advanced_filter_form(f, app, main_area);

@@ -10,6 +10,8 @@ use std::ops::{Index, IndexMut};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldKind {
     Text,
+    /// Text drawn masked, for credentials.
+    Secret,
     Date,
     Amount,
     /// Arrow keys cycle a fixed set of values.
@@ -20,7 +22,7 @@ pub enum FieldKind {
 
 impl FieldKind {
     pub const fn is_editable(self) -> bool {
-        matches!(self, Self::Text | Self::Date | Self::Amount)
+        matches!(self, Self::Text | Self::Secret | Self::Date | Self::Amount)
     }
 }
 
@@ -235,6 +237,14 @@ form_fields! {
         EntryKind => FieldKind::Toggle, "Entry", "(◀/▶ to toggle)";
         Amount => FieldKind::Amount, "Amount";
         Note => FieldKind::Text, "Note", "(Optional)";
+    }
+}
+
+form_fields! {
+    pub enum BankSyncSetupField {
+        ClientId => FieldKind::Text, "Client ID", "(dashboard.pluggy.ai > Applications)";
+        ClientSecret => FieldKind::Secret, "Client Secret";
+        ItemIds => FieldKind::Text, "Item IDs", "(one per connected bank, comma-separated)";
     }
 }
 

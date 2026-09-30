@@ -1,7 +1,7 @@
 use super::bank_sync::BankSyncJob;
 use crate::app::fields::{
-    AddEditField, AdvancedFilterField, CategoryEditField, FieldSet, InvestmentAccountField,
-    InvestmentEntryField, RecurringField, SelectingField,
+    AddEditField, AdvancedFilterField, BankSyncSetupField, CategoryEditField, FieldSet,
+    InvestmentAccountField, InvestmentEntryField, RecurringField, SelectingField,
 };
 use crate::app::update_checker;
 use crate::config::{AppSettings, load_settings, save_settings};
@@ -69,6 +69,7 @@ pub enum AppMode {
     InvestmentAccountEditor,
     InvestmentEntryEditor,
     ConfirmInvestmentDelete,
+    BankSyncSetup,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -238,6 +239,8 @@ pub struct App {
     pub(crate) update_rx: mpsc::Receiver<Option<String>>,
     // Bank sync (Pluggy); Some while a fetch is running
     pub(crate) bank_sync_job: Option<BankSyncJob>,
+    pub(crate) bank_sync_setup_fields: FieldSet<BankSyncSetupField, 3>,
+    pub(crate) bank_sync_setup_cursor: usize,
     // Follows the active Omarchy theme
     pub(crate) theme_watcher: ThemeWatcher,
 }
@@ -499,6 +502,8 @@ impl App {
             show_update_popup: false,
             update_rx: rx,
             bank_sync_job: None,
+            bank_sync_setup_fields: Default::default(),
+            bank_sync_setup_cursor: 0,
             theme_watcher: ThemeWatcher::new(),
         };
         if let Some(version) = Self::newer_schema_version(&app.database_path) {

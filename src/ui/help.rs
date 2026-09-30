@@ -399,6 +399,14 @@ pub fn render_help_bar(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("q/Esc", Style::default().fg(theme::current().bright_cyan)),
             Span::raw(": Back"),
         ],
+        AppMode::BankSyncSetup => vec![
+            Span::raw("Type or paste | "),
+            Span::raw("Tab/↑↓ Fields | "),
+            Span::styled("Enter", Style::default().fg(theme::current().bright_green)),
+            Span::raw(": Save and sync | "),
+            Span::styled("Esc", Style::default().fg(theme::current().bright_red)),
+            Span::raw(": Skip"),
+        ],
         AppMode::LedgerEditor => vec![
             Span::raw("Type a name | "),
             Span::raw("←→ Cursor | "),
