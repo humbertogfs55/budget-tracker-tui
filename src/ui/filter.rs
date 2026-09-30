@@ -1,11 +1,12 @@
 use crate::app::fields::{FieldKey, FieldKind};
 use crate::app::state::App;
+use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
 pub fn render_filter_input(f: &mut Frame, app: &App, area: Rect) {
     let input = Paragraph::new(app.simple_filter_content.as_str())
-        .style(Style::default().fg(Color::LightYellow))
+        .style(Style::default().fg(theme::current().bright_yellow))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -27,19 +28,19 @@ pub fn render_advanced_filter_form(f: &mut Frame, app: &App, area: Rect) {
             let content = if field.kind() == FieldKind::Toggle {
                 Span::styled(
                     format!(" < {} > ", text),
-                    Style::default().fg(Color::White).bold(),
+                    Style::default().fg(theme::current().text).bold(),
                 )
             } else {
                 Span::raw(text.as_str())
             };
             Paragraph::new(content)
-                .style(Style::default().fg(Color::White))
+                .style(Style::default().fg(theme::current().text))
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .title(label)
                         .border_style(if field == focused_field {
-                            Style::default().fg(Color::Yellow)
+                            Style::default().fg(theme::current().yellow)
                         } else {
                             Style::default()
                         }),

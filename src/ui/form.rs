@@ -1,4 +1,5 @@
 use crate::app::fields::{FieldKey, FieldKind, FieldSet};
+use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
@@ -22,22 +23,22 @@ pub fn render_field_form<K: FieldKey, const N: usize>(
                 .trim_end()
                 .to_string();
             let content = match placeholder(field) {
-                Some(hint) => Span::styled(hint, Style::default().fg(Color::DarkGray)),
+                Some(hint) => Span::styled(hint, Style::default().fg(theme::current().muted)),
                 None if field.kind() == FieldKind::Toggle => Span::styled(
                     format!(" < {} > ", text),
-                    Style::default().fg(Color::White).bold(),
+                    Style::default().fg(theme::current().text).bold(),
                 ),
                 None => Span::raw(text.as_str()),
             };
 
             Paragraph::new(content)
-                .style(Style::default().fg(Color::White))
+                .style(Style::default().fg(theme::current().text))
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .title(box_title)
                         .border_style(if field == focused_field {
-                            Style::default().fg(Color::Yellow)
+                            Style::default().fg(theme::current().yellow)
                         } else {
                             Style::default()
                         }),

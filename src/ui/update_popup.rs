@@ -1,9 +1,10 @@
 use crate::app::state::App;
+use crate::theme;
 use crate::ui::helpers::centered_rect;
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
-    style::{Color, Style},
+    style::Style,
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
@@ -18,7 +19,11 @@ pub fn render_update_popup(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title("Update Available")
         .borders(Borders::ALL)
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+        .style(
+            Style::default()
+                .bg(theme::current().header_bg)
+                .fg(theme::current().text),
+        );
 
     let inner_area = block.inner(popup_area);
 
@@ -33,7 +38,7 @@ pub fn render_update_popup(f: &mut Frame, app: &App, area: Rect) {
     let paragraph = Paragraph::new(text)
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(theme::current().text));
 
     f.render_widget(paragraph, inner_area);
 }

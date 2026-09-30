@@ -1,6 +1,7 @@
 use crate::app::investments::STALE_VALUATION_DAYS;
 use crate::app::state::App;
 use crate::model::{InvestmentEntryKind, InvestmentRange};
+use crate::theme;
 use crate::ui::form::render_field_form;
 use crate::ui::helpers::{centered_rect, clamp_table_scroll, format_amount, format_signed_amount};
 use chrono::NaiveDate;
@@ -12,32 +13,27 @@ use ratatui::widgets::{
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 
-const PANEL_CHROME_COLOR: Color = Color::LightBlue;
-const VALUE_COLOR: Color = Color::LightCyan;
-const INVESTED_COLOR: Color = Color::Magenta;
-const STALE_COLOR: Color = Color::Rgb(255, 165, 0);
-
 fn panel(title: Line<'static>, borders: Borders) -> Block<'static> {
     Block::default()
         .title(title)
         .borders(borders)
-        .border_style(Style::default().fg(PANEL_CHROME_COLOR))
+        .border_style(Style::default().fg(theme::current().accent))
 }
 
 fn heading(text: &str) -> Span<'static> {
     Span::styled(
         text.to_string(),
         Style::default()
-            .fg(PANEL_CHROME_COLOR)
+            .fg(theme::current().accent)
             .add_modifier(Modifier::BOLD),
     )
 }
 
 fn gain_style(amount: Decimal) -> Style {
     if amount < Decimal::ZERO {
-        Style::default().fg(Color::LightRed)
+        Style::default().fg(theme::current().bright_red)
     } else {
-        Style::default().fg(Color::LightGreen)
+        Style::default().fg(theme::current().bright_green)
     }
 }
 
@@ -120,11 +116,11 @@ fn render_empty_state(f: &mut Frame, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "Then press 'v' whenever you check on it to record what it is worth, and open",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::current().muted),
         )),
         Line::from(Span::styled(
             "it with Enter to add contributions and withdrawals. Growth comes from those.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::current().muted),
         )),
     ])
     .alignment(Alignment::Center)
@@ -153,26 +149,29 @@ fn render_stats_panel(f: &mut Frame, app: &App, area: Rect) {
                 account.name
             ))];
             if !account.kind.trim().is_empty() {
-                spans.push(Span::styled(" | ", Style::default().fg(PANEL_CHROME_COLOR)));
+                spans.push(Span::styled(
+                    " | ",
+                    Style::default().fg(theme::current().accent),
+                ));
                 spans.push(Span::styled(
                     account.kind.clone(),
-                    Style::default().fg(Color::Cyan),
+                    Style::default().fg(theme::current().cyan),
                 ));
             }
             if account.archived {
                 spans.push(Span::styled(
                     " (archived)",
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme::current().muted),
                 ));
             }
             Line::from(spans)
         }
         None => Line::from(vec![
             heading("Investments"),
-            Span::styled(" | ", Style::default().fg(PANEL_CHROME_COLOR)),
+            Span::styled(" | ", Style::default().fg(theme::current().accent)),
             Span::styled(
                 app.active_ledger_name().to_string(),
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(theme::current().cyan),
             ),
         ]),
     };
@@ -194,12 +193,12 @@ fn render_stats_panel(f: &mut Frame, app: &App, area: Rect) {
         stat_line(
             "Value",
             format_amount(&position.value),
-            Style::default().fg(VALUE_COLOR),
+            Style::default().fg(theme::current().bright_cyan),
         ),
         stat_line(
             "Invested",
             format_amount(&position.invested),
-            Style::default().fg(INVESTED_COLOR),
+            Style::default().fg(theme::current().magenta),
         ),
     ];
     let gain_lines = vec![
@@ -223,7 +222,7 @@ fn render_stats_panel(f: &mut Frame, app: &App, area: Rect) {
                     .as_of
                     .map(|date| date.format("%Y-%m-%d").to_string())
                     .unwrap_or_else(|| "-".to_string()),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(theme::current().muted),
             ),
             range => stat_line(
                 range.label(),
@@ -234,7 +233,7 @@ fn render_stats_panel(f: &mut Frame, app: &App, area: Rect) {
         stat_line(
             "Annual",
             format_rate(annualized),
-            Style::default().fg(Color::White),
+            Style::default().fg(theme::current().text),
         ),
     ];
 
@@ -289,26 +288,26 @@ fn render_value_chart(f: &mut Frame, app: &App, area: Rect) {
             .name("Invested")
             .marker(symbols::Marker::Braille)
             .graph_type(GraphType::Line)
-            .style(Style::default().fg(INVESTED_COLOR))
+            .style(Style::default().fg(theme::current().magenta))
             .data(&invested_points),
         Dataset::default()
             .name("Value")
             .marker(symbols::Marker::Braille)
             .graph_type(GraphType::Line)
-            .style(Style::default().fg(VALUE_COLOR))
+            .style(Style::default().fg(theme::current().bright_cyan))
             .data(&value_points),
     ];
 
     let title = Line::from(vec![
         heading("Growth"),
-        Span::styled(" | ", Style::default().fg(PANEL_CHROME_COLOR)),
+        Span::styled(" | ", Style::default().fg(theme::current().accent)),
         Span::styled(
             app.investment_range.label().to_string(),
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" (◀/▶) ", Style::default().fg(Color::DarkGray)),
+        Span::styled(" (◀/▶) ", Style::default().fg(theme::current().muted)),
     ]);
 
     let chart = Chart::new(datasets)
@@ -432,15 +431,15 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
             let (as_of_text, as_of_style) = match position.as_of {
                 Some(date) if stale => (
                     format!("{} !", date.format("%Y-%m-%d")),
-                    Style::default().fg(STALE_COLOR),
+                    Style::default().fg(theme::current().orange),
                 ),
                 Some(date) => (
                     date.format("%Y-%m-%d").to_string(),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme::current().muted),
                 ),
                 None => (
                     "no value yet".to_string(),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme::current().muted),
                 ),
             };
 
@@ -455,22 +454,24 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
                 )
             };
             let name_style = if account.archived {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(theme::current().muted)
             } else {
                 Style::default()
             };
 
             let mut cells = vec![Cell::from(name).style(name_style)];
             if show_kind {
-                cells
-                    .push(Cell::from(account.kind.clone()).style(Style::default().fg(Color::Cyan)));
+                cells.push(
+                    Cell::from(account.kind.clone())
+                        .style(Style::default().fg(theme::current().cyan)),
+                );
             }
             cells.extend([
                 Cell::from(right(format_amount(&position.value)))
-                    .style(Style::default().fg(VALUE_COLOR)),
+                    .style(Style::default().fg(theme::current().bright_cyan)),
                 Cell::from(as_of_text).style(as_of_style),
                 Cell::from(right(format_amount(&position.invested)))
-                    .style(Style::default().fg(INVESTED_COLOR)),
+                    .style(Style::default().fg(theme::current().magenta)),
                 Cell::from(right(format_signed_amount(&position.gain())))
                     .style(gain_style(position.gain())),
                 Cell::from(right(format_percent(position.roi())))
@@ -489,12 +490,12 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     total_cells.extend([
         Cell::from(right(format_amount(&total.value))).style(
             Style::default()
-                .fg(VALUE_COLOR)
+                .fg(theme::current().bright_cyan)
                 .add_modifier(Modifier::BOLD),
         ),
         Cell::from(""),
         Cell::from(right(format_amount(&total.invested)))
-            .style(Style::default().fg(INVESTED_COLOR)),
+            .style(Style::default().fg(theme::current().magenta)),
         Cell::from(right(format_signed_amount(&total.gain())))
             .style(gain_style(total.gain()).add_modifier(Modifier::BOLD)),
         Cell::from(right(format_percent(total.roi()))).style(gain_style(total.gain())),
@@ -515,7 +516,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     ]);
     let header = Row::new(header_cells).style(
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme::current().cyan)
             .add_modifier(Modifier::BOLD),
     );
 
@@ -535,12 +536,12 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
     if archived {
         title.push(Span::styled(
             " (incl. archived)",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::current().muted),
         ));
     } else if app.visible_investment_ids().is_empty() {
         title.push(Span::styled(
             " | all archived, press A to show",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(theme::current().muted),
         ));
     }
     if !stale_ids.is_empty() {
@@ -550,7 +551,7 @@ fn render_accounts_table(f: &mut Frame, app: &mut App, area: Rect) {
                 stale_ids.len(),
                 STALE_VALUATION_DAYS
             ),
-            Style::default().fg(STALE_COLOR),
+            Style::default().fg(theme::current().orange),
         ));
     }
 
@@ -580,20 +581,25 @@ fn render_entries_table(f: &mut Frame, app: &mut App, area: Rect) {
         .iter()
         .map(|entry| {
             let (label, style) = match entry.entry_kind {
-                InvestmentEntryKind::Valuation => ("Valuation", Style::default().fg(VALUE_COLOR)),
-                InvestmentEntryKind::Contribution => {
-                    ("Contribution", Style::default().fg(Color::LightGreen))
-                }
-                InvestmentEntryKind::Withdrawal => {
-                    ("Withdrawal", Style::default().fg(Color::LightRed))
-                }
+                InvestmentEntryKind::Valuation => (
+                    "Valuation",
+                    Style::default().fg(theme::current().bright_cyan),
+                ),
+                InvestmentEntryKind::Contribution => (
+                    "Contribution",
+                    Style::default().fg(theme::current().bright_green),
+                ),
+                InvestmentEntryKind::Withdrawal => (
+                    "Withdrawal",
+                    Style::default().fg(theme::current().bright_red),
+                ),
             };
 
             Row::new(vec![
                 Cell::from(entry.date.format("%Y-%m-%d").to_string()),
                 Cell::from(label).style(style),
                 Cell::from(right(format_amount(&entry.amount))).style(style),
-                Cell::from(entry.note.clone()).style(Style::default().fg(Color::DarkGray)),
+                Cell::from(entry.note.clone()).style(Style::default().fg(theme::current().muted)),
             ])
         })
         .collect();
@@ -606,7 +612,7 @@ fn render_entries_table(f: &mut Frame, app: &mut App, area: Rect) {
     ])
     .style(
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme::current().cyan)
             .add_modifier(Modifier::BOLD),
     );
 
@@ -638,9 +644,9 @@ fn render_yearly_table(f: &mut Frame, app: &App, area: Rect) {
         .rev()
         .map(|(year, invested, growth, ret)| {
             Row::new(vec![
-                Cell::from(year.to_string()).style(Style::default().fg(Color::Magenta)),
+                Cell::from(year.to_string()).style(Style::default().fg(theme::current().magenta)),
                 Cell::from(right(format_amount(invested)))
-                    .style(Style::default().fg(INVESTED_COLOR)),
+                    .style(Style::default().fg(theme::current().magenta)),
                 Cell::from(right(format_signed_amount(growth))).style(gain_style(*growth)),
                 Cell::from(right(format_percent(*ret))).style(gain_style(*growth)),
             ])
@@ -655,7 +661,7 @@ fn render_yearly_table(f: &mut Frame, app: &App, area: Rect) {
     ])
     .style(
         Style::default()
-            .fg(Color::Cyan)
+            .fg(theme::current().cyan)
             .add_modifier(Modifier::BOLD),
     );
 

@@ -42,6 +42,10 @@ where
             needs_redraw = true;
         }
 
+        if app.theme_watcher.poll() {
+            needs_redraw = true;
+        }
+
         if needs_redraw {
             terminal.draw(|f| ui(f, app))?;
             needs_redraw = false;

@@ -1,4 +1,5 @@
 use crate::app::state::App;
+use crate::theme;
 use crate::ui::helpers::clamp_table_scroll;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -9,7 +10,7 @@ pub fn render_ledger_manager(f: &mut Frame, app: &mut App, area: Rect) {
     let header = Row::new(["", "Ledger"])
         .style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme::current().cyan)
                 .add_modifier(Modifier::BOLD),
         )
         .height(1);
@@ -20,14 +21,14 @@ pub fn render_ledger_manager(f: &mut Frame, app: &mut App, area: Rect) {
         let marker = if is_active { "●" } else { "" };
         let name_style = if is_active {
             Style::default()
-                .fg(Color::LightGreen)
+                .fg(theme::current().bright_green)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
         };
 
         Row::new(vec![
-            Cell::from(marker).style(Style::default().fg(Color::LightGreen)),
+            Cell::from(marker).style(Style::default().fg(theme::current().bright_green)),
             Cell::from(ledger.name.clone()).style(name_style),
         ])
     });
@@ -63,14 +64,14 @@ pub fn render_ledger_editor(f: &mut Frame, app: &App, area: Rect) {
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Blue));
+        .border_style(Style::default().fg(theme::current().blue));
     f.render_widget(block, popup_area);
 
     let input = Paragraph::new(app.ledger_name_input.as_str()).block(
         Block::default()
             .borders(Borders::ALL)
             .title("Name")
-            .border_style(Style::default().fg(Color::Yellow)),
+            .border_style(Style::default().fg(theme::current().yellow)),
     );
     f.render_widget(input, chunks[0]);
 

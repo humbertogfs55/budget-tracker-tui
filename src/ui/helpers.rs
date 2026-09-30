@@ -1,3 +1,4 @@
+use crate::theme;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Color;
 use ratatui::widgets::{ListState, TableState};
@@ -101,19 +102,9 @@ pub fn month_to_short_str(month: u32) -> &'static str {
 }
 
 pub fn month_to_color(month: u32) -> Color {
+    let theme = theme::current();
     match month {
-        1 => Color::LightRed,
-        2 => Color::LightGreen,
-        3 => Color::LightBlue,
-        4 => Color::LightYellow,
-        5 => Color::LightMagenta,
-        6 => Color::LightCyan,
-        7 => Color::Red,
-        8 => Color::Green,
-        9 => Color::Blue,
-        10 => Color::Yellow,
-        11 => Color::Magenta,
-        12 => Color::Cyan,
-        _ => Color::White,
+        1..=12 => theme.months()[month as usize - 1],
+        _ => theme.text,
     }
 }

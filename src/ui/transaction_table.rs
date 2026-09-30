@@ -1,5 +1,6 @@
 use crate::app::state::App;
 use crate::model::{DATE_FORMAT, SortColumn, SortOrder, TransactionType};
+use crate::theme;
 use crate::ui::helpers::{clamp_table_scroll, format_amount, format_hours};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -31,9 +32,9 @@ pub fn render_transaction_table(f: &mut Frame, app: &mut App, area: Rect) {
         .zip(sort_columns.iter())
         .map(|(title, column)| {
             let style = if is_filtered {
-                Style::default().fg(Color::Yellow).bold()
+                Style::default().fg(theme::current().yellow).bold()
             } else {
-                Style::default().fg(Color::Cyan).bold()
+                Style::default().fg(theme::current().cyan).bold()
             };
             let symbol = if app.sort_by == *column {
                 match app.sort_order {
@@ -52,7 +53,7 @@ pub fn render_transaction_table(f: &mut Frame, app: &mut App, area: Rect) {
         });
 
     let header = Row::new(header_cells)
-        .style(Style::default().bg(Color::DarkGray))
+        .style(Style::default().bg(theme::current().header_bg))
         .height(1)
         .bottom_margin(1);
 
@@ -60,14 +61,16 @@ pub fn render_transaction_table(f: &mut Frame, app: &mut App, area: Rect) {
     let today = chrono::Local::now().date_naive();
     let rows = app.filtered_indices.iter().map(|&original_index| {
         if original_index >= app.transactions.len() {
-            return Row::new(vec![Cell::from("Error: Invalid Index").fg(Color::Red)])
-                .height(1)
-                .bottom_margin(0);
+            return Row::new(vec![
+                Cell::from("Error: Invalid Index").fg(theme::current().red),
+            ])
+            .height(1)
+            .bottom_margin(0);
         }
         let tx = &app.transactions[original_index];
         let amount_style = match tx.transaction_type {
-            TransactionType::Income => Style::default().fg(Color::LightGreen),
-            TransactionType::Expense => Style::default().fg(Color::LightRed),
+            TransactionType::Income => Style::default().fg(theme::current().bright_green),
+            TransactionType::Expense => Style::default().fg(theme::current().bright_red),
         };
 
         // Add visual indicators for recurring transactions
@@ -111,7 +114,7 @@ pub fn render_transaction_table(f: &mut Frame, app: &mut App, area: Rect) {
             spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -121,12 +124,12 @@ pub fn render_transaction_table(f: &mut Frame, app: &mut App, area: Rect) {
         ));
         spans.push(Span::styled(
             format!(": {}", app.active_ledger_name()),
-            Style::default().fg(Color::LightGreen),
+            Style::default().fg(theme::current().bright_green),
         ));
         if app.recurring_forecast_months > 0 {
             spans.push(Span::styled(
                 format!(" (Forecast +{}mo)", app.recurring_forecast_months),
-                Style::default().fg(Color::Cyan),
+                Style::default().fg(theme::current().cyan),
             ));
         }
         Line::from(spans)

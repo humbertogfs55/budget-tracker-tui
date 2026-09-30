@@ -14,6 +14,7 @@ use crate::db::investment_store::{InvestmentStore, SqliteInvestmentStore};
 use crate::db::ledger_store::{DEFAULT_LEDGER_ID, LedgerRecord, LedgerStore, SqliteLedgerStore};
 use crate::db::transaction_store::{SqliteTransactionStore, TransactionStore};
 use crate::model::*;
+use crate::theme::ThemeWatcher;
 use chrono::{Datelike, Duration, NaiveDate};
 use ratatui::widgets::{ListState, TableState};
 use rust_decimal::Decimal;
@@ -237,6 +238,8 @@ pub struct App {
     pub(crate) update_rx: mpsc::Receiver<Option<String>>,
     // Bank sync (Pluggy); Some while a fetch is running
     pub(crate) bank_sync_job: Option<BankSyncJob>,
+    // Follows the active Omarchy theme
+    pub(crate) theme_watcher: ThemeWatcher,
 }
 
 impl App {
@@ -496,6 +499,7 @@ impl App {
             show_update_popup: false,
             update_rx: rx,
             bank_sync_job: None,
+            theme_watcher: ThemeWatcher::new(),
         };
         if let Some(version) = Self::newer_schema_version(&app.database_path) {
             app.status_message = Some(format!(

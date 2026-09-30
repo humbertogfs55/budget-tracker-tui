@@ -1,4 +1,5 @@
 use crate::app::state::App;
+use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::{
     Block, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
@@ -54,8 +55,8 @@ pub fn render_settings_form(f: &mut Frame, app: &App, area: Rect) {
 
     let popup_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Blue))
-        .style(Style::default().bg(Color::Black))
+        .border_style(Style::default().fg(theme::current().blue))
+        .style(Style::default().bg(theme::current().panel_bg))
         .title(" Settings - [Esc] Cancel, [Enter] Save/Action ")
         .title_bottom(Line::from(help_text).centered());
 
@@ -114,7 +115,7 @@ pub fn render_settings_form(f: &mut Frame, app: &App, area: Rect) {
             let header = Paragraph::new(Line::from(vec![Span::styled(
                 &item.label,
                 Style::default()
-                    .fg(Color::Cyan)
+                    .fg(theme::current().cyan)
                     .add_modifier(Modifier::BOLD),
             )]))
             .alignment(Alignment::Center)
@@ -129,7 +130,7 @@ pub fn render_settings_form(f: &mut Frame, app: &App, area: Rect) {
             // Render Input Field
             let is_action = item.setting_type == crate::app::settings_types::SettingType::Action;
             let border_style = if is_focused {
-                Style::default().fg(Color::Yellow)
+                Style::default().fg(theme::current().yellow)
             } else {
                 Style::default()
             };
@@ -155,13 +156,13 @@ pub fn render_settings_form(f: &mut Frame, app: &App, area: Rect) {
                     display_value,
                     if is_focused {
                         Style::default()
-                            .fg(Color::Black)
-                            .bg(Color::LightGreen)
+                            .fg(theme::current().on_accent)
+                            .bg(theme::current().bright_green)
                             .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default()
-                            .fg(Color::White)
-                            .bg(Color::DarkGray)
+                            .fg(theme::current().text)
+                            .bg(theme::current().header_bg)
                             .add_modifier(Modifier::BOLD)
                     },
                 )]))

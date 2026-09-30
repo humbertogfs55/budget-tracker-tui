@@ -35,6 +35,8 @@ Runtime locations: config `~/.config/BudgetTracker/config.json`, database `~/.lo
 
 **Derived data is never stored.** Only real transactions are persisted; recurring occurrences are generated in memory (`generate_recurring_transactions`). Investments store valuations and cash flows separately (`investment_entries.entry_kind`); value = last valuation + flows after it, invested = sum of flows, gain is derived (`Portfolio` in `src/model.rs`). Only one valuation per account per day (partial unique index).
 
+**Colors.** UI code never uses `Color::*` directly; it reads `theme::current()` (`src/theme.rs`), a process-wide palette with ANSI-named hues (`bright_green` = old `LightGreen`) plus roles (`text`, `muted`, `accent`, `header_bg`, `panel_bg`, ...). `ThemeWatcher`, polled from the runner loop, rereads `$XDG_STATE_HOME/omarchy/current/theme/colors.toml` once a second, so an `omarchy-theme-set` applies live. Without that file the defaults are the original named colors. Keys that are missing or aren't a valid hex color keep their default.
+
 **Tests.** Most store/integration tests live in the `tests` module of `src/db/transaction_store.rs` using `TempDb` (a throwaway on-disk DB). Pure mapping rules are tested in `src/pluggy/mapping.rs`. Test fixtures use invented names and amounts, never real bank data.
 
 ## Bank sync (fork only)

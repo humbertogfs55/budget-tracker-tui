@@ -1,5 +1,6 @@
 use crate::app::state::App;
 use crate::db::backup::{BackupEntry, backups_dir};
+use crate::theme;
 use crate::ui::helpers::clamp_table_scroll;
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -24,16 +25,16 @@ pub fn render_backup_manager(f: &mut Frame, app: &mut App, area: Rect) {
     let header = Row::new(["Taken", "Kind", "Size", "Data", "Device"])
         .style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(theme::current().cyan)
                 .add_modifier(Modifier::BOLD),
         )
         .height(1);
 
     let rows = app.backup_entries.iter().map(|entry| {
         let device_style = if entry.is_this_device {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(theme::current().muted)
         } else {
-            Style::default().fg(Color::LightYellow)
+            Style::default().fg(theme::current().bright_yellow)
         };
 
         Row::new(vec![

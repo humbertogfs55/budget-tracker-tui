@@ -7,6 +7,7 @@ mod market_price;
 mod model;
 mod pluggy;
 mod recurring;
+mod theme;
 mod ui;
 mod validation;
 

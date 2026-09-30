@@ -1,5 +1,6 @@
 use crate::app::state::App;
 use crate::model::BudgetMonth;
+use crate::theme;
 use crate::ui::helpers::{format_amount, format_hours, month_to_short_str};
 use crate::validation::days_in_month;
 use chrono::Datelike;
@@ -11,28 +12,15 @@ use ratatui::widgets::{
 use rust_decimal::Decimal;
 use rust_decimal::prelude::*;
 
-/// Colors assigned to a year's months in order, shared by the chart and the totals bar.
-const MONTH_PALETTE: [Color; 12] = [
-    Color::LightRed,
-    Color::LightGreen,
-    Color::LightBlue,
-    Color::LightYellow,
-    Color::LightMagenta,
-    Color::LightCyan,
-    Color::Red,
-    Color::Green,
-    Color::Blue,
-    Color::Yellow,
-    Color::Magenta,
-    Color::Cyan,
-];
-
 /// Color of `month` given the sorted months that have data in its year.
 fn month_color(months: &[u32], month: u32) -> Color {
     months
         .iter()
         .position(|&m| m == month)
-        .map_or(Color::White, |idx| MONTH_PALETTE[idx % MONTH_PALETTE.len()])
+        .map_or(theme::current().text, |idx| {
+            let palette = theme::current().months();
+            palette[idx % palette.len()]
+        })
 }
 
 pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
@@ -114,12 +102,12 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                     .name(month_to_short_str(month))
                     .marker(ratatui::symbols::Marker::Braille)
                     .graph_type(GraphType::Line)
-                    .style(Style::default().fg(MONTH_PALETTE[i % MONTH_PALETTE.len()]))
+                    .style(Style::default().fg(theme::current().months()[i % 12]))
                     .data(line_data),
             );
             legend_labels.push(Span::styled(
                 month_to_short_str(month),
-                Style::default().fg(MONTH_PALETTE[i % MONTH_PALETTE.len()]),
+                Style::default().fg(theme::current().months()[i % 12]),
             ));
         }
     } else {
@@ -169,7 +157,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             // Determine color for this month (same as in title)
             let month_color = app
                 .selected_summary_month
-                .map_or(Color::White, |m| month_color(&months, m));
+                .map_or(theme::current().text, |m| month_color(&months, m));
             datasets.push(
                 Dataset::default()
                     .name(month_to_short_str(month))
@@ -206,7 +194,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -218,14 +206,14 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 " (Cumulative)",
                 Style::default()
-                    .fg(Color::LightYellow)
+                    .fg(theme::current().bright_yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
         title_spans.push(Span::styled(
             " (All Months)",
             Style::default()
-                .fg(Color::LightCyan)
+                .fg(theme::current().bright_cyan)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -235,7 +223,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -250,7 +238,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     } else {
         let month_color = app
             .selected_summary_month
-            .map_or(Color::White, |m| month_color(&months, m));
+            .map_or(theme::current().text, |m| month_color(&months, m));
         let month_str = app
             .selected_summary_month
             .map(month_to_short_str)
@@ -262,7 +250,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -274,7 +262,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 " (Cumulative)",
                 Style::default()
-                    .fg(Color::LightYellow)
+                    .fg(theme::current().bright_yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -285,7 +273,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -352,7 +340,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             legend_labels.push(Span::styled(
                 "CumuBudget",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::DIM),
             ));
         }
@@ -365,7 +353,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                 .graph_type(GraphType::Line)
                 .style(
                     Style::default()
-                        .fg(Color::Yellow)
+                        .fg(theme::current().yellow)
                         .add_modifier(Modifier::DIM),
                 )
                 .data(budget_line),
@@ -410,7 +398,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -421,7 +409,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -450,9 +438,9 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                     .label(month_to_short_str(month))
                     .value(net_i64.unsigned_abs())
                     .style(if net >= Decimal::ZERO {
-                        Style::default().fg(Color::LightGreen)
+                        Style::default().fg(theme::current().bright_green)
                     } else {
-                        Style::default().fg(Color::LightRed)
+                        Style::default().fg(theme::current().bright_red)
                     }),
             );
             max_abs_chart_value = max_abs_chart_value.max(net_i64.abs());
@@ -475,7 +463,7 @@ pub fn render_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         .bar_width(bar_width)
         .bar_gap(bar_gap)
         .group_gap(0)
-        .label_style(Style::default().fg(Color::White))
+        .label_style(Style::default().fg(theme::current().text))
         .max(max_abs_chart_value.max(10) as u64);
     f.render_widget(bar_chart, bar_chart_area);
 }
@@ -510,22 +498,22 @@ pub fn render_summary_bar(
     let income_span = Span::styled(
         format!("Income: {}", income_str),
         Style::default()
-            .fg(Color::LightGreen)
+            .fg(theme::current().bright_green)
             .add_modifier(Modifier::BOLD),
     );
     let expense_span = Span::styled(
         format!("Expenses: {}", expense_str),
         Style::default()
-            .fg(Color::LightRed)
+            .fg(theme::current().bright_red)
             .add_modifier(Modifier::BOLD),
     );
     let net_style = if net_balance >= Decimal::ZERO {
         Style::default()
-            .fg(Color::LightGreen)
+            .fg(theme::current().bright_green)
             .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
-            .fg(Color::LightRed)
+            .fg(theme::current().bright_red)
             .add_modifier(Modifier::BOLD)
     };
     let net_str = if net_balance >= Decimal::ZERO {
@@ -553,7 +541,7 @@ pub fn render_summary_bar(
                 Span::styled("Total - ", bold),
                 Span::styled(month_to_short_str(month), bold.fg(color)),
                 Span::styled(" ", bold),
-                Span::styled(year.to_string(), bold.fg(Color::Magenta)),
+                Span::styled(year.to_string(), bold.fg(theme::current().magenta)),
             ]
         }
         (Some(year), None) => vec![Span::styled(format!("Grand Total - {}", year), bold)],

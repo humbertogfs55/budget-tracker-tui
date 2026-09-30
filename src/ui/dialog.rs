@@ -1,4 +1,5 @@
 use crate::app::state::App;
+use crate::theme;
 use crate::ui::helpers::{centered_rect, clamp_list_scroll};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -9,11 +10,11 @@ pub fn render_confirmation_dialog(f: &mut Frame, message: &str, area: Rect) {
     let dialog_block = Block::default()
         .title("Confirmation")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(theme::current().yellow));
 
     let dialog_text = Paragraph::new(message)
         .block(dialog_block)
-        .style(Style::default().fg(Color::White))
+        .style(Style::default().fg(theme::current().text))
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true });
 
@@ -32,7 +33,7 @@ pub fn render_selection_popup(f: &mut Frame, app: &mut App, area: Rect) {
     let items: Vec<ListItem> = app
         .current_selection_list
         .iter()
-        .map(|i| ListItem::new(i.as_str()).style(Style::default().fg(Color::White)))
+        .map(|i| ListItem::new(i.as_str()).style(Style::default().fg(theme::current().text)))
         .collect();
 
     let item_count = items.len();

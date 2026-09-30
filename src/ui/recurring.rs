@@ -1,9 +1,10 @@
 use crate::app::fields::{FieldKey, FieldKind};
 use crate::app::state::App;
+use crate::theme;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::Span,
     widgets::{Block, Borders, Paragraph},
 };
@@ -23,32 +24,32 @@ pub fn render_recurring_settings(f: &mut Frame, app: &App, area: Rect) {
                 FieldKind::Toggle => Span::styled(
                     format!(" < {} > ", text),
                     Style::default()
-                        .fg(Color::White)
+                        .fg(theme::current().text)
                         .add_modifier(Modifier::BOLD),
                 ),
                 FieldKind::Selection => Span::styled(
                     format!("  {}  ", text),
                     Style::default()
-                        .fg(Color::White)
+                        .fg(theme::current().text)
                         .add_modifier(Modifier::BOLD),
                 ),
                 _ if text.is_empty() => Span::styled(
                     " (Optional - leave empty for no end date) ",
                     Style::default()
-                        .fg(Color::DarkGray)
+                        .fg(theme::current().muted)
                         .add_modifier(Modifier::ITALIC),
                 ),
                 _ => Span::raw(text.as_str()),
             };
 
             Paragraph::new(content)
-                .style(Style::default().fg(Color::White))
+                .style(Style::default().fg(theme::current().text))
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .title(title)
                         .border_style(if is_focused {
-                            Style::default().fg(Color::Yellow)
+                            Style::default().fg(theme::current().yellow)
                         } else {
                             Style::default()
                         }),

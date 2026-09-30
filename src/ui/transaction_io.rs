@@ -1,4 +1,5 @@
 use crate::app::state::{App, AppMode};
+use crate::theme;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
@@ -29,8 +30,8 @@ pub fn render_io_prompt(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Clear, popup);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow))
-        .style(Style::default().bg(Color::Black))
+        .border_style(Style::default().fg(theme::current().yellow))
+        .style(Style::default().bg(theme::current().panel_bg))
         .title(title)
         .title_bottom(
             Line::from(format!(
@@ -43,7 +44,10 @@ pub fn render_io_prompt(f: &mut Frame, app: &App, area: Rect) {
 
     let label_area = Rect::new(popup.x + 2, popup.y + 1, popup.width.saturating_sub(4), 1);
     f.render_widget(
-        Paragraph::new(Span::styled(label, Style::default().fg(Color::Gray))),
+        Paragraph::new(Span::styled(
+            label,
+            Style::default().fg(theme::current().subtle),
+        )),
         label_area,
     );
 

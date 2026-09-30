@@ -1,4 +1,5 @@
 use crate::app::state::App;
+use crate::theme;
 use crate::ui::helpers::{centered_rect, clamp_list_scroll};
 use ratatui::prelude::*;
 use ratatui::widgets::*;
@@ -20,11 +21,11 @@ pub fn render_fuzzy_search(f: &mut Frame, app: &mut App, area: Rect) {
     let search_block = Block::default()
         .title("Search Category (Type to filter)")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
+        .border_style(Style::default().fg(theme::current().yellow));
 
     let search_text = Paragraph::new(app.search_query.as_str())
         .block(search_block)
-        .style(Style::default().fg(Color::White));
+        .style(Style::default().fg(theme::current().text));
 
     f.render_widget(search_text, chunks[0]);
 
@@ -32,7 +33,7 @@ pub fn render_fuzzy_search(f: &mut Frame, app: &mut App, area: Rect) {
     let items: Vec<ListItem> = app
         .current_selection_list
         .iter()
-        .map(|i| ListItem::new(i.as_str()).style(Style::default().fg(Color::White)))
+        .map(|i| ListItem::new(i.as_str()).style(Style::default().fg(theme::current().text)))
         .collect();
 
     let item_count = items.len();

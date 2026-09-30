@@ -1,5 +1,6 @@
 use crate::app::help::get_help_for_mode;
 use crate::app::state::{App, AppMode};
+use crate::theme;
 use crate::ui::helpers::clamp_table_scroll;
 use ratatui::{prelude::*, widgets::*};
 
@@ -17,7 +18,7 @@ pub fn render_keybindings_popup(f: &mut Frame, app: &mut App, area: Rect) {
             let description_cell = if b.extended_description.is_some() {
                 Line::from(vec![
                     Span::raw(b.description),
-                    Span::styled(" [+]", Style::default().fg(Color::LightGreen)),
+                    Span::styled(" [+]", Style::default().fg(theme::current().bright_green)),
                 ])
             } else {
                 Line::from(b.description)
@@ -27,11 +28,14 @@ pub fn render_keybindings_popup(f: &mut Frame, app: &mut App, area: Rect) {
                 Cell::from(Span::styled(
                     b.key,
                     Style::default()
-                        .fg(Color::Cyan)
+                        .fg(theme::current().cyan)
                         .add_modifier(Modifier::BOLD),
                 )),
                 Cell::from(description_cell),
-                Cell::from(Span::styled(b.group, Style::default().fg(Color::DarkGray))),
+                Cell::from(Span::styled(
+                    b.group,
+                    Style::default().fg(theme::current().muted),
+                )),
             ])
         })
         .collect();
@@ -50,7 +54,7 @@ pub fn render_keybindings_popup(f: &mut Frame, app: &mut App, area: Rect) {
         Row::new(vec!["Key", "Action", "Group"])
             .style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             )
             .bottom_margin(1),
@@ -63,7 +67,7 @@ pub fn render_keybindings_popup(f: &mut Frame, app: &mut App, area: Rect) {
             ))
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::LightBlue)),
+            .border_style(Style::default().fg(theme::current().bright_blue)),
     )
     .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
@@ -107,7 +111,7 @@ fn render_extended_help_popup(f: &mut Frame, title: &str, description: &str, par
     let block = Block::default()
         .title(format!(" Details: {} ", title))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Green));
+        .border_style(Style::default().fg(theme::current().green));
 
     let paragraph = Paragraph::new(description)
         .block(block)

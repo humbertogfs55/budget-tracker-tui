@@ -1,5 +1,6 @@
 use crate::app::state::{App, CategorySummaryItem};
 use crate::model::{CategorySummarySortColumn, MonthlySummary, SortOrder, TransactionType};
+use crate::theme;
 use crate::ui::helpers::{clamp_table_scroll, format_amount, month_to_short_str};
 use ratatui::prelude::*;
 use ratatui::text::Line;
@@ -12,7 +13,7 @@ fn cell_income(amount: Decimal, bold: bool) -> Cell<'static> {
     if amount.round_dp(2).is_zero() {
         return Cell::from("");
     }
-    let mut style = Style::default().fg(Color::LightGreen);
+    let mut style = Style::default().fg(theme::current().bright_green);
     if bold {
         style = style.add_modifier(Modifier::BOLD);
     }
@@ -22,7 +23,7 @@ fn cell_expense(amount: Decimal, bold: bool) -> Cell<'static> {
     if amount.round_dp(2).is_zero() {
         return Cell::from("");
     }
-    let mut style = Style::default().fg(Color::LightRed);
+    let mut style = Style::default().fg(theme::current().bright_red);
     if bold {
         style = style.add_modifier(Modifier::BOLD);
     }
@@ -35,9 +36,9 @@ fn cell_net(net: Decimal, bold: bool) -> Cell<'static> {
         format_amount(&net)
     };
     let mut style = if net >= Decimal::ZERO {
-        Style::default().fg(Color::LightGreen)
+        Style::default().fg(theme::current().bright_green)
     } else {
-        Style::default().fg(Color::LightRed)
+        Style::default().fg(theme::current().bright_red)
     };
     if bold {
         style = style.add_modifier(Modifier::BOLD);
@@ -48,9 +49,9 @@ fn cell_net(net: Decimal, bold: bool) -> Cell<'static> {
 // Dim these amounts because they are already included in the total above.
 fn cell_detail_amount(amount: Decimal, income: bool) -> Cell<'static> {
     let color = if income {
-        Color::LightGreen
+        theme::current().bright_green
     } else {
-        Color::LightRed
+        theme::current().bright_red
     };
     Cell::from(Line::from(format_amount(&amount)).alignment(Alignment::Right))
         .style(Style::default().fg(color).add_modifier(Modifier::DIM))
@@ -107,19 +108,22 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         let title = format!("{}{}", h, symbol);
         let (content, style) = if i >= 3 {
             let s = match i {
-                3 => Style::default().fg(Color::LightGreen).bold(), // Income
-                4 => Style::default().fg(Color::LightRed).bold(),   // Expense
-                5 => Style::default().fg(Color::LightBlue).bold(),  // Net
-                _ => Style::default().fg(Color::Cyan).bold(),
+                3 => Style::default().fg(theme::current().bright_green).bold(), // Income
+                4 => Style::default().fg(theme::current().bright_red).bold(),   // Expense
+                5 => Style::default().fg(theme::current().bright_blue).bold(),  // Net
+                _ => Style::default().fg(theme::current().cyan).bold(),
             };
             (Line::from(title).alignment(Alignment::Right), s)
         } else {
-            (Line::from(title), Style::default().fg(Color::Cyan).bold())
+            (
+                Line::from(title),
+                Style::default().fg(theme::current().cyan).bold(),
+            )
         };
         Cell::from(content).style(style)
     });
     let header = Row::new(header_cells)
-        .style(Style::default().bg(Color::DarkGray))
+        .style(Style::default().bg(theme::current().header_bg))
         .height(1);
 
     // Data for Table (hierarchical)
@@ -130,18 +134,18 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     let year_str = current_year.map_or_else(|| "N/A".to_string(), |y| y.to_string());
     let items = &app.cached_visible_category_items;
     let color_palette = [
-        Color::LightRed,
-        Color::LightGreen,
-        Color::LightBlue,
-        Color::LightYellow,
-        Color::LightMagenta,
-        Color::LightCyan,
-        Color::Red,
-        Color::Green,
-        Color::Blue,
-        Color::Yellow,
-        Color::Magenta,
-        Color::Cyan,
+        theme::current().bright_red,
+        theme::current().bright_green,
+        theme::current().bright_blue,
+        theme::current().bright_yellow,
+        theme::current().bright_magenta,
+        theme::current().bright_cyan,
+        theme::current().red,
+        theme::current().green,
+        theme::current().blue,
+        theme::current().yellow,
+        theme::current().magenta,
+        theme::current().cyan,
     ];
     // Build sorted months for the current year for color mapping
     let mut months: Vec<u32> = vec![];
@@ -190,7 +194,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                 ])
                 .height(1)
                 .bottom_margin(0)
-                .style(Style::default().bg(Color::Rgb(20, 20, 20))) // Dark gray background on month rows
+                .style(Style::default().bg(theme::current().band_bg))
             }
             CategorySummaryItem::Subcategory(month, category, sub, summary) => {
                 let child_count = items[i + 1..]
@@ -240,9 +244,11 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             }
             CategorySummaryItem::Transaction(month, index) => {
                 let Some(tx) = app.transactions.get(*index) else {
-                    return Row::new(vec![Cell::from("Error: Invalid Index").fg(Color::Red)])
-                        .height(1)
-                        .bottom_margin(0);
+                    return Row::new(vec![
+                        Cell::from("Error: Invalid Index").fg(theme::current().red),
+                    ])
+                    .height(1)
+                    .bottom_margin(0);
                 };
                 let month_idx = months.iter().position(|&m| m == *month).unwrap_or(0);
                 let arrow_color = color_palette[month_idx % color_palette.len()];
@@ -289,7 +295,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                         ),
                         Span::styled(
                             tx.date.format("%b %d (%a)").to_string(),
-                            Style::default().fg(Color::Gray),
+                            Style::default().fg(theme::current().subtle),
                         ),
                     ])),
                     Cell::from(description),
@@ -319,13 +325,13 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             "Grand Total",
             Style::default()
                 .add_modifier(Modifier::BOLD)
-                .fg(Color::Magenta),
+                .fg(theme::current().magenta),
         )),
         Cell::from(Span::styled(
             &year_str,
             Style::default()
                 .add_modifier(Modifier::BOLD)
-                .fg(Color::Magenta),
+                .fg(theme::current().magenta),
         )),
         Cell::from(""),
         total_inc_cell,
@@ -334,7 +340,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
     ])
     .height(1)
     .bottom_margin(0)
-    .style(Style::default().bg(Color::Rgb(10, 10, 10)));
+    .style(Style::default().bg(theme::current().total_bg));
 
     let is_filtered = app.filtered_indices.len() != app.transactions.len();
     let table_title = {
@@ -347,7 +353,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -358,7 +364,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -445,9 +451,9 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
                 let net_val = *net;
                 let net_i64 = net_val.round().to_i64().unwrap_or(0);
                 let net_style = if net_val >= Decimal::ZERO {
-                    Style::default().fg(Color::LightGreen)
+                    Style::default().fg(theme::current().bright_green)
                 } else {
-                    Style::default().fg(Color::LightRed)
+                    Style::default().fg(theme::current().bright_red)
                 };
                 current_max = current_max.max(net_i64.abs());
                 Bar::default()
@@ -468,7 +474,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -489,7 +495,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         chart_title = Line::from(title_spans);
@@ -503,7 +509,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
             title_spans.push(Span::styled(
                 "(Filtered) ",
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(theme::current().yellow)
                     .add_modifier(Modifier::BOLD),
             ));
         }
@@ -514,7 +520,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         title_spans.push(Span::styled(
             y,
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme::current().magenta)
                 .add_modifier(Modifier::BOLD),
         ));
         title_spans.push(Span::styled(
@@ -540,7 +546,7 @@ pub fn render_category_summary_view(f: &mut Frame, app: &mut App, area: Rect) {
         .bar_width(bar_width)
         .bar_gap(bar_gap)
         .group_gap(0)
-        .label_style(Style::default().fg(Color::White))
+        .label_style(Style::default().fg(theme::current().text))
         .max(max_abs_chart_value);
 
     f.render_widget(bar_chart, chart_area);

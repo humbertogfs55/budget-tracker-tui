@@ -1,6 +1,7 @@
 use crate::app::fields::CategoryEditField;
 use crate::app::state::App;
 use crate::model::{CategorySortColumn, SortOrder};
+use crate::theme;
 use crate::ui::form::render_field_form;
 use crate::ui::helpers::clamp_table_scroll;
 use ratatui::prelude::*;
@@ -45,9 +46,9 @@ pub fn render_category_catalog(f: &mut Frame, app: &mut App, area: Rect) {
         CategorySortColumn::TargetBudget,
     ];
     let header_style = if app.is_category_filter_active() {
-        Style::default().fg(Color::Yellow).bold()
+        Style::default().fg(theme::current().yellow).bold()
     } else {
-        Style::default().fg(Color::Cyan).bold()
+        Style::default().fg(theme::current().cyan).bold()
     };
     let header_cells = ["Type", "Category", "Subcategory", "Tag", "Budget"]
         .iter()
@@ -82,8 +83,8 @@ pub fn render_category_catalog(f: &mut Frame, app: &mut App, area: Rect) {
                 .map(|value| {
                     Cell::from(Line::from(format!("{value:.2}")).alignment(Alignment::Right)).style(
                         Style::default()
-                            .fg(Color::LightCyan)
-                            .bg(Color::Rgb(20, 20, 20))
+                            .fg(theme::current().bright_cyan)
+                            .bg(theme::current().band_bg)
                             .add_modifier(Modifier::BOLD),
                     )
                 });
@@ -126,7 +127,7 @@ pub fn render_category_catalog(f: &mut Frame, app: &mut App, area: Rect) {
 
 pub fn render_category_filter_input(f: &mut Frame, app: &App, area: Rect) {
     let input = Paragraph::new(app.category_filter_query.as_str())
-        .style(Style::default().fg(Color::LightYellow))
+        .style(Style::default().fg(theme::current().bright_yellow))
         .block(
             Block::default()
                 .borders(Borders::ALL)
