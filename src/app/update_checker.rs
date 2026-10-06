@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::time::Duration;
 
+pub const RELEASES_URL: &str = "https://github.com/humbertogfs55/budget-tracker-tui/releases";
+
 #[derive(Deserialize)]
 struct Release {
     tag_name: String,
@@ -15,7 +17,7 @@ pub fn check_for_updates() -> Option<String> {
         .new_agent();
 
     let response = agent
-        .get("https://api.github.com/repos/Feromond/budget-tracker-tui/releases/latest")
+        .get("https://api.github.com/repos/humbertogfs55/budget-tracker-tui/releases/latest")
         .header("User-Agent", "budget-tracker-tui_update_checker")
         .call();
 
